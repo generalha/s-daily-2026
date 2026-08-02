@@ -2,14 +2,17 @@
  * 關東太太 注文・発送・利益管理システム セットアップスクリプト
  * ------------------------------------------------------------
  * このスクリプトを1回実行するだけで、
- *   ・注文入力用のGoogleフォーム
+ *   ・注文者（お客様）が直接入力するGoogleフォーム
  *   ・回答が自動で貯まるスプレッドシート（回答／設定／ダッシュボードの3シート）
  * をまとめて自動生成します。
  *
  * 使い方は同じフォルダの README.md を参照してください。
  *
  * 【運用の考え方（超重要）】
- * ・奥さんが毎回入力するのは「フォームの回答」だけ。
+ * ・フォームは「注文者（お客様）」が入力するもの。仕入れ値や支払い状況など
+ *   社内管理の情報はフォームに含めない（お客様に見せない・入力させない）。
+ * ・仕入れ価格・国内送料・支払い状況・発送状況・発送方法・重量・追跡番号は、
+ *   注文が入った後に妻が『回答』シートのI〜O列に直接入力する（プルダウン付き）。
  * ・注文ID、円換算売上、粗利益、利益率、EMS用コピペ、案内文の下書きは
  *   すべて数式（ARRAYFORMULA）で自動計算されるので、
  *   トリガーの設定やスクリプトの実行は最初の1回だけでOK。
@@ -24,7 +27,8 @@
 
 var FORM_TITLE = '關東太太 注文・発送管理フォーム';
 var FORM_DESCRIPTION =
-  '注文内容を記録するフォームです。入力後、販売金額、未入金、発送待ちを確認します。';
+  'ご注文内容の確認用フォームです。ご入力いただいた内容を確認のうえ、' +
+  'お支払い・発送についてこちらからあらためてご案内いたします。';
 
 var SHEET_NAME_RESPONSES = '回答';       // フォームの回答が入るシート
 var SHEET_NAME_SETTINGS = '設定';        // 為替レートなどの設定シート
@@ -51,7 +55,7 @@ function setupKantoTsumaSystem() {
     var existingSheet = SpreadsheetApp.openById(existingSheetId);
     Logger.log('すでにセットアップ済みです。以下のURLを使ってください。');
     Logger.log('フォーム編集URL: ' + existingForm.getEditUrl());
-    Logger.log('フォーム回答URL(奥さんが入力する画面): ' + existingForm.getPublishedUrl());
+    Logger.log('フォーム回答URL(注文者に共有する画面): ' + existingForm.getPublishedUrl());
     Logger.log('スプレッドシートURL: ' + existingSheet.getUrl());
     return;
   }
@@ -65,24 +69,22 @@ function setupKantoTsumaSystem() {
   var responseSheet = findFormResponseSheet_(ss);
   responseSheet.setName(SHEET_NAME_RESPONSES);
 
-  // 3. 作成直後の空きシート（Sheet1など）は最後にまとめて掃除する
-  //    ※ 設定・ダッシュボードシートを作った後に削除する（シートが0枚にならないように）
+  // 3. 回答シートに「妻が入力する管理列」と「自動計算列」を追加
+  setupStaffManagedColumns_(responseSheet);
+  setupComputedColumns_(responseSheet);
 
-  // 4. 回答シートに自動計算列を追加
-  setupResponseSheetFormulas_(responseSheet);
-
-  // 5. 設定シートを作成
+  // 4. 設定シートを作成
   var settingsSheet = ss.insertSheet(SHEET_NAME_SETTINGS);
   setupSettingsSheet_(settingsSheet);
 
-  // 6. ダッシュボードシートを作成
+  // 5. ダッシュボードシートを作成
   var dashboardSheet = ss.insertSheet(SHEET_NAME_DASHBOARD);
   setupDashboardSheet_(dashboardSheet);
 
-  // 7. 不要な初期シート（Sheet1／シート1など）を削除
+  // 6. 不要な初期シート（Sheet1／シート1など）を削除
   removeDefaultBlankSheets_(ss, [SHEET_NAME_RESPONSES, SHEET_NAME_SETTINGS, SHEET_NAME_DASHBOARD]);
 
-  // 8. シートの並び順を「回答→設定→ダッシュボード」にそろえる
+  // 7. シートの並び順を「回答→設定→ダッシュボード」にそろえる
   responseSheet.activate();
   ss.moveActiveSheet(1);
   settingsSheet.activate();
@@ -91,19 +93,19 @@ function setupKantoTsumaSystem() {
   ss.moveActiveSheet(3);
   responseSheet.activate();
 
-  // 9. 次回以降の誤操作防止のため、作成したIDを保存
+  // 8. 次回以降の誤操作防止のため、作成したIDを保存
   props.setProperty('KANTO_TSUMA_FORM_ID', form.getId());
   props.setProperty('KANTO_TSUMA_SHEET_ID', ss.getId());
 
-  // 10. 完成したURLをログに出力
+  // 9. 完成したURLをログに出力
   Logger.log('===== セットアップ完了 =====');
   Logger.log('フォーム編集URL: ' + form.getEditUrl());
-  Logger.log('フォーム回答URL(奥さんが入力する画面): ' + form.getPublishedUrl());
+  Logger.log('フォーム回答URL(注文者に共有する画面): ' + form.getPublishedUrl());
   Logger.log('スプレッドシートURL: ' + ss.getUrl());
 }
 
 // ============================================================
-// 1. フォーム作成
+// 1. フォーム作成（注文者＝お客様が直接入力する項目のみ）
 // ============================================================
 
 function createOrderForm_() {
@@ -118,7 +120,7 @@ function createOrderForm_() {
 
   // ---- 販売先（プルダウン・必須） ----
   form.addListItem()
-    .setTitle('販売先')
+    .setTitle('販売先（どちらでご注文いただきましたか）')
     .setChoiceValues(['LINEオープンチャット', '個別LINE', 'Facebook', 'その他'])
     .setRequired(true);
 
@@ -140,55 +142,15 @@ function createOrderForm_() {
     .setValidation(numberValidation_());
 
   // ---- 販売価格（台湾ドル）（数値・必須） ----
+  // ご案内済みの金額をそのままご入力いただく想定です。
   form.addTextItem()
     .setTitle('販売価格（台湾ドル）')
     .setRequired(true)
     .setValidation(numberValidation_());
 
-  // ---- 仕入れ価格（日本円）（数値・任意） ----
-  form.addTextItem()
-    .setTitle('仕入れ価格（日本円）')
-    .setRequired(false)
-    .setValidation(numberValidation_());
-
-  // ---- 国内送料（日本円）（数値・任意） ----
-  form.addTextItem()
-    .setTitle('国内送料（日本円）')
-    .setRequired(false)
-    .setValidation(numberValidation_());
-
-  // ---- 支払い状況（プルダウン・必須） ----
-  form.addListItem()
-    .setTitle('支払い状況')
-    .setChoiceValues(['未請求', '請求済み', '一部入金', '入金済み'])
-    .setRequired(true);
-
-  // ---- 発送状況（プルダウン・必須） ----
-  form.addListItem()
-    .setTitle('発送状況')
-    .setChoiceValues(['未発送', '同梱待ち', '梱包済み', '発送済み'])
-    .setRequired(true);
-
-  // ---- 発送方法（プルダウン・任意） ----
-  form.addListItem()
-    .setTitle('発送方法')
-    .setChoiceValues(['未定', 'EMS', '国際小包航空便', 'その他'])
-    .setRequired(false);
-
-  // ---- 重量（グラム）（数値・任意） ----
-  form.addTextItem()
-    .setTitle('重量（グラム）')
-    .setRequired(false)
-    .setValidation(numberValidation_());
-
-  // ---- 追跡番号（短文・任意） ----
-  form.addTextItem()
-    .setTitle('追跡番号')
-    .setRequired(false);
-
   // ---- メモ（段落・任意） ----
   form.addParagraphTextItem()
-    .setTitle('メモ')
+    .setTitle('メモ（ご要望などあればご記入ください）')
     .setRequired(false);
 
   return form;
@@ -203,11 +165,11 @@ function numberValidation_() {
 }
 
 // ============================================================
-// 2. 回答シート：自動計算列のセットアップ
+// 2. 回答シート：妻が入力する管理列（I〜O）のセットアップ
 // ============================================================
 
 /**
- * フォームの質問は A〜O列に自動で入る（A列はタイムスタンプ）。
+ * フォームの質問は A〜H列に自動で入る（A列はタイムスタンプ）。
  *   A タイムスタンプ
  *   B 注文者名
  *   C 販売先
@@ -215,22 +177,60 @@ function numberValidation_() {
  *   E 商品名・型番
  *   F 数量
  *   G 販売価格（台湾ドル）
- *   H 仕入れ価格（日本円）
- *   I 国内送料（日本円）
- *   J 支払い状況
- *   K 発送状況
- *   L 発送方法
- *   M 重量（グラム）
- *   N 追跡番号
- *   O メモ
+ *   H メモ
  *
- * この関数はその右側 P〜V列に、注文ID・円換算売上・粗利益・利益率・
- * EMS用コピペ・案内文の下書きをARRAYFORMULA（数式）で自動追加する。
+ * この関数はその右側 I〜O列に、仕入れ値・送料・支払い状況・発送状況・
+ * 発送方法・重量・追跡番号の「妻が注文確認後に入力する管理欄」を追加する。
+ * 支払い状況／発送状況／発送方法はプルダウンにしてあるので、
+ * クリックして選ぶだけで入力できる（入力ミス防止）。
+ * 見分けやすいように背景色を薄い黄色にしている。
+ */
+function setupStaffManagedColumns_(sheet) {
+  var headers = [
+    '仕入れ価格（日本円）', '国内送料（日本円）', '支払い状況',
+    '発送状況', '発送方法', '重量（グラム）', '追跡番号'
+  ];
+  sheet.getRange(1, 9, 1, headers.length).setValues([headers]); // I1〜O1
+
+  var lastRow = sheet.getMaxRows();
+
+  // 支払い状況（K列）のプルダウン
+  var paymentRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['未請求', '請求済み', '一部入金', '入金済み'], true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(2, 11, lastRow - 1, 1).setDataValidation(paymentRule); // K2:K
+
+  // 発送状況（L列）のプルダウン
+  var shippingRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['未発送', '同梱待ち', '梱包済み', '発送済み'], true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(2, 12, lastRow - 1, 1).setDataValidation(shippingRule); // L2:L
+
+  // 発送方法（M列）のプルダウン
+  var methodRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['未定', 'EMS', '国際小包航空便', 'その他'], true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(2, 13, lastRow - 1, 1).setDataValidation(methodRule); // M2:M
+
+  // 「妻が入力する欄」だとひと目で分かるよう薄い黄色を付ける
+  sheet.getRange(1, 9, lastRow, 7).setBackground('#fff2cc');
+}
+
+// ============================================================
+// 3. 回答シート：自動計算列（P〜V）のセットアップ
+// ============================================================
+
+/**
+ * P〜V列に、注文ID・円換算売上・粗利益・利益率・EMS用コピペ・
+ * 案内文の下書きをARRAYFORMULA（数式）で自動追加する。
  * ARRAYFORMULAを2行目に1つ入れておけば、フォームで新しい回答が
  * 追加されるたびに自動で計算されるので、その都度スクリプトを
  * 動かす必要はない。
  */
-function setupResponseSheetFormulas_(sheet) {
+function setupComputedColumns_(sheet) {
   var headers = [
     '注文ID', '為替レート（使用値）', '売上（円換算）', '粗利益（円）', '利益率',
     'EMS用コピペ', '案内文の下書き'
@@ -252,9 +252,9 @@ function setupResponseSheetFormulas_(sheet) {
     '=ARRAYFORMULA(IF(A2:A="","",IFERROR(G2:G/Q2:Q,"")))'
   );
 
-  // 粗利益（円）＝ 売上（円換算） − 仕入れ価格 − 国内送料（未入力は0扱い）
+  // 粗利益（円）＝ 売上（円換算） − 仕入れ価格(I) − 国内送料(J)（未入力は0扱い）
   sheet.getRange('S2').setFormula(
-    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(R2:R-N(H2:H)-N(I2:I),"")))'
+    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(R2:R-N(I2:I)-N(J2:J),"")))'
   );
 
   // 利益率 ＝ 粗利益 ÷ 売上（円換算）
@@ -262,12 +262,12 @@ function setupResponseSheetFormulas_(sheet) {
     '=ARRAYFORMULA(IF(A2:A="","",IFERROR(S2:S/R2:R,"")))'
   );
 
-  // EMS用コピペ欄：注文者・商品名・数量・発送方法・重量・販売価格・メモを1行に整形
+  // EMS用コピペ欄：注文者・商品名・数量・発送方法(M)・重量(N)・販売価格(G)・メモ(H)を1行に整形
   sheet.getRange('U2').setFormula(
     '=ARRAYFORMULA(IF(A2:A="","",' +
-      'B2:B&" ｜ "&E2:E&" x"&F2:F&"個 ｜ 発送方法:"&IF(L2:L="","未定",L2:L)&' +
-      '" ｜ 重量:"&IF(M2:M="","未計測",M2:M&"g")&" ｜ 販売価格:NT$"&G2:G&' +
-      '" ｜ メモ:"&IF(O2:O="","なし",O2:O)))'
+      'B2:B&" ｜ "&E2:E&" x"&F2:F&"個 ｜ 発送方法:"&IF(M2:M="","未定",M2:M)&' +
+      '" ｜ 重量:"&IF(N2:N="","未計測",N2:N&"g")&" ｜ 販売価格:NT$"&G2:G&' +
+      '" ｜ メモ:"&IF(H2:H="","なし",H2:H)))'
   );
 
   // 案内文の下書き：お客さん向けにそのままコピペできる文面
@@ -279,7 +279,7 @@ function setupResponseSheetFormulas_(sheet) {
       '"商品名："&E2:E&CHAR(10)&' +
       '"数量："&F2:F&"個"&CHAR(10)&' +
       '"商品代金：NT$"&G2:G&CHAR(10)&' +
-      '"発送方法："&IF(L2:L="","未定",L2:L)&CHAR(10)&' +
+      '"発送方法："&IF(M2:M="","未定",M2:M)&CHAR(10)&' +
       '"送料につきましては、梱包完了後にあらためてご案内いたします。"&CHAR(10)&CHAR(10)&' +
       '"引き続きどうぞよろしくお願いいたします。"))'
   );
@@ -328,7 +328,7 @@ function removeDefaultBlankSheets_(ss, keepNames) {
 }
 
 // ============================================================
-// 3. 設定シート
+// 4. 設定シート
 // ============================================================
 
 function setupSettingsSheet_(sheet) {
@@ -361,7 +361,7 @@ function setupSettingsSheet_(sheet) {
 }
 
 // ============================================================
-// 4. ダッシュボードシート
+// 5. ダッシュボードシート
 // ============================================================
 
 function setupDashboardSheet_(sheet) {
@@ -380,14 +380,16 @@ function setupDashboardSheet_(sheet) {
   sheet.getRange('B5').setFormula('=SUM(' + R + '!S2:S)');
   sheet.getRange('B5').setNumberFormat('¥#,##0');
 
-  sheet.getRange('A6').setValue('未入金件数（未請求＋一部入金）');
+  // 未入金＝支払い状況が「入金済み」以外（未記入の新規注文も含む）
+  sheet.getRange('A6').setValue('未入金件数（入金済み以外）');
   sheet.getRange('B6').setFormula(
-    '=COUNTIF(' + R + '!J2:J,"未請求")+COUNTIF(' + R + '!J2:J,"一部入金")'
+    '=COUNTIFS(' + R + '!B2:B,"<>",' + R + '!K2:K,"<>入金済み")'
   );
 
+  // 未発送＝発送状況が「発送済み」以外（未記入の新規注文も含む）
   sheet.getRange('A7').setValue('未発送件数（発送済み以外）');
   sheet.getRange('B7').setFormula(
-    '=COUNTIFS(' + R + '!K2:K,"<>",' + R + '!K2:K,"<>発送済み")'
+    '=COUNTIFS(' + R + '!B2:B,"<>",' + R + '!L2:L,"<>発送済み")'
   );
 
   sheet.getRange('A4:A7').setFontWeight('bold');
