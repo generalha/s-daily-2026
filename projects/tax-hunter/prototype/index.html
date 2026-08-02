@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>タックスハンター 看破バトル</title>
+</head>
+<body>
+<style>
+  :root{
+    --night:#10161f; --night2:#1a2432; --night3:#232f42;
+    --parch:#f2e8d5; --parch-dim:#b8ac93; --line:#3a4a63;
+    --gold:#d9a441; --gold-bright:#f0c869; --gold-deep:#8a6420;
+    --slime:#4aa3d9; --slime-deep:#255e85;
+    --danger:#c8503c; --danger-bright:#e8705a;
+    --serif:"Hiragino Mincho ProN","Yu Mincho","YuMincho","Noto Serif JP",serif;
+    --sans:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",Meiryo,"Noto Sans JP",sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:#090d13; color:var(--parch); font-family:var(--sans);
+    overflow:hidden; touch-action:manipulation; user-select:none; -webkit-user-select:none;
+  }
+  #app{
+    position:relative; margin:0 auto; max-width:480px; height:100vh; height:100dvh;
+    background:
+      radial-gradient(120% 55% at 50% -10%, #24384f 0%, transparent 60%),
+      radial-gradient(90% 40% at 50% 108%, #14251c 0%, transparent 70%),
+      var(--night);
+    overflow:hidden; display:flex; flex-direction:column;
+  }
+  .screen{position:absolute; inset:0; display:flex; flex-direction:column; transition:opacity .35s; }
+  .hidden{opacity:0; pointer-events:none}
+
+  /* ---------- 共通部品 ---------- */
+  .btn{
+    font-family:var(--sans); font-weight:700; color:var(--night);
+    background:linear-gradient(180deg, var(--gold-bright), var(--gold));
+    border:none; border-radius:10px; padding:14px 20px; font-size:17px;
+    box-shadow:0 3px 0 var(--gold-deep), 0 6px 18px rgba(0,0,0,.45);
+    cursor:pointer;
+  }
+  .btn:active{transform:translateY(2px); box-shadow:0 1px 0 var(--gold-deep)}
+  .btn-ghost{
+    background:transparent; color:var(--parch-dim); border:1px solid var(--line);
+    box-shadow:none; font-weight:600;
+  }
+  .num{font-variant-numeric:tabular-nums}
+
+  /* ---------- タイトル ---------- */
+  #title{justify-content:center; align-items:center; gap:10px; padding:28px; text-align:center}
+  #title .halo{
+    position:absolute; top:12%; left:50%; width:260px; height:260px; transform:translateX(-50%);
+    background:radial-gradient(circle, rgba(217,164,65,.16) 0%, transparent 65%); pointer-events:none;
+  }
+  .title-eyebrow{
+    font-size:12px; letter-spacing:.42em; color:var(--gold); text-transform:uppercase;
+    margin-bottom:6px;
+  }
+  .title-logo{
+    font-family:var(--serif); font-weight:800; font-size:44px; line-height:1.15;
+    color:var(--parch); text-wrap:balance; text-shadow:0 0 24px rgba(217,164,65,.25);
+  }
+  .title-logo em{font-style:normal; color:var(--gold-bright)}
+  .title-sub{font-size:13px; color:var(--parch-dim); margin-top:10px; line-height:1.8}
+  .title-quest{
+    margin-top:26px; border:1px solid var(--line); border-radius:12px; padding:14px 18px;
+    background:rgba(26,36,50,.75); font-size:13px; line-height:1.9; color:var(--parch);
+    max-width:320px;
+  }
+  .title-quest b{color:var(--gold-bright)}
+  .title-quest .tag{font-size:11px; letter-spacing:.2em; color:var(--parch-dim); display:block; margin-bottom:4px}
+  #title .btn{margin-top:26px; width:min(78%,300px); font-size:19px; padding:16px}
+  #title .btn-ghost{margin-top:12px; width:min(78%,300px)}
+  .title-note{margin-top:18px; font-size:11px; color:#5d6b82}
+
+  /* ---------- バトル ---------- */
+  #battle{padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 12px)}
+  #stage{display:flex; flex-direction:column; height:100%; gap:8px}
+  #stage.shake{animation:shake .38s}
+  #stage.shake-big{animation:shakeBig .5s}
+  @keyframes shake{0%,100%{transform:none}20%{transform:translate(5px,-3px)}40%{transform:translate(-6px,2px)}60%{transform:translate(4px,3px)}80%{transform:translate(-3px,-2px)}}
+  @keyframes shakeBig{0%,100%{transform:none}15%{transform:translate(10px,-6px) rotate(.6deg)}35%{transform:translate(-11px,5px) rotate(-.6deg)}55%{transform:translate(8px,6px)}75%{transform:translate(-6px,-5px)}}
+
+  .topbar{display:flex; align-items:center; gap:10px}
+  .hp-block{flex:1}
+  .hp-label{display:flex; justify-content:space-between; font-size:11px; color:var(--parch-dim); margin-bottom:3px; letter-spacing:.08em}
+  .bar{height:10px; border-radius:6px; background:#0b1017; border:1px solid var(--line); overflow:hidden}
+  .bar > i{display:block; height:100%; border-radius:5px; transition:width .3s}
+  #php-bar > i{background:linear-gradient(90deg,#67b06a,#8fd08a); width:100%}
+  #combo-chip{
+    min-width:86px; text-align:center; font-family:var(--serif); font-weight:800;
+    border:1px solid var(--line); border-radius:10px; padding:6px 8px; background:rgba(26,36,50,.7);
+    font-size:13px; color:var(--parch-dim); line-height:1.3;
+  }
+  #combo-chip b{display:block; font-size:19px; color:var(--gold-bright)}
+  #combo-chip.hot{border-color:var(--gold); box-shadow:0 0 14px rgba(217,164,65,.35)}
+
+  /* 敵ゾーン */
+  #enemy-zone{position:relative; flex:1; min-height:150px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end}
+  .enemy-name{font-family:var(--serif); font-size:15px; letter-spacing:.14em; color:var(--parch)}
+  .enemy-name small{color:var(--slime); font-size:11px; margin-left:6px}
+  #ehp-wrap{width:min(72%,260px); margin:6px 0 4px}
+  #ehp-bar > i{background:linear-gradient(90deg,var(--slime-deep),var(--slime)); width:100%}
+  #enemy{
+    position:relative; width:132px; height:104px; margin-bottom:2px;
+    animation:bob 2.6s ease-in-out infinite;
+  }
+  @keyframes bob{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-7px) scaleY(1.04)}}
+  #enemy .body{
+    position:absolute; inset:0;
+    background:radial-gradient(circle at 38% 30%, #8fd0f5 0%, var(--slime) 40%, var(--slime-deep) 100%);
+    border-radius:52% 48% 55% 45% / 62% 60% 40% 38%;
+    box-shadow:0 10px 26px rgba(74,163,217,.35), inset 0 -12px 22px rgba(0,0,0,.28);
+  }
+  #enemy .shine{position:absolute; top:16px; left:24px; width:26px; height:14px; background:rgba(255,255,255,.75); border-radius:50%; transform:rotate(-18deg)}
+  #enemy .eye{position:absolute; top:40px; width:11px; height:16px; background:#122531; border-radius:50%}
+  #enemy .eye.l{left:40px} #enemy .eye.r{right:40px}
+  #enemy .mouth{position:absolute; top:62px; left:50%; width:22px; height:9px; transform:translateX(-50%); background:#122531; border-radius:0 0 12px 12px}
+  #enemy.stunned{animation:wobble .5s ease-in-out infinite}
+  #enemy.stunned .eye{height:3px; top:47px; border-radius:2px}
+  @keyframes wobble{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg) translateY(2px)}}
+  #enemy.lunge{animation:lunge .5s}
+  @keyframes lunge{0%{transform:translateY(0)}35%{transform:translateY(-16px) scale(1.06)}65%{transform:translateY(26px) scale(1.1)}100%{transform:translateY(0)}}
+  #enemy.dead{animation:melt 1.1s forwards}
+  @keyframes melt{60%{transform:scaleY(.5) translateY(26px); opacity:.9}100%{transform:scaleY(.06) translateY(52px); opacity:0}}
+  .kanpa-ring{
+    position:absolute; left:50%; top:50%; width:20px; height:20px; border:3px solid var(--gold-bright);
+    border-radius:50%; transform:translate(-50%,-50%); opacity:0; pointer-events:none;
+  }
+  .kanpa-ring.go{animation:ring .55s ease-out forwards}
+  @keyframes ring{0%{opacity:1; width:20px; height:20px}100%{opacity:0; width:190px; height:190px}}
+  .dmg{
+    position:absolute; font-family:var(--serif); font-weight:800; font-size:26px; color:var(--parch);
+    text-shadow:0 2px 6px rgba(0,0,0,.6); pointer-events:none; animation:dmgFloat .8s forwards;
+  }
+  .dmg.crit{color:var(--gold-bright); font-size:34px}
+  .dmg.hurt{color:var(--danger-bright)}
+  @keyframes dmgFloat{0%{opacity:0; transform:translateY(8px) scale(.6)}20%{opacity:1; transform:translateY(0) scale(1.1)}100%{opacity:0; transform:translateY(-46px) scale(1)}}
+
+  /* 問いカード */
+  #qcard{
+    position:relative; border:1px solid var(--line); border-radius:14px;
+    background:linear-gradient(180deg, rgba(35,47,66,.92), rgba(26,36,50,.92));
+    padding:14px 16px 12px; min-height:104px;
+  }
+  #qcard::before{
+    content:""; position:absolute; top:-9px; left:50%; width:16px; height:16px; transform:translateX(-50%) rotate(45deg);
+    background:#232f42; border-left:1px solid var(--line); border-top:1px solid var(--line);
+  }
+  #qcard.finisher{border-color:var(--gold); box-shadow:0 0 22px rgba(217,164,65,.3)}
+  .q-eyebrow{font-size:11px; letter-spacing:.28em; color:var(--slime); margin-bottom:6px}
+  #qcard.finisher .q-eyebrow{color:var(--gold-bright)}
+  #qtext{font-size:16px; line-height:1.65; font-weight:700; min-height:52px; text-wrap:balance}
+  #timer{height:5px; border-radius:3px; background:#0b1017; margin-top:10px; overflow:hidden}
+  #timer > i{display:block; height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-bright)); width:100%}
+  #timer.rush > i{background:var(--danger-bright)}
+
+  /* 回答・攻撃 */
+  #answers{display:grid; grid-template-columns:1fr 1fr; gap:9px}
+  .ans{
+    font-family:var(--sans); font-size:14.5px; font-weight:700; line-height:1.4; color:var(--parch);
+    background:rgba(26,36,50,.9); border:1px solid var(--line); border-radius:12px;
+    padding:14px 10px; min-height:62px; cursor:pointer;
+  }
+  .ans:active{background:var(--night3)}
+  .ans.right{background:linear-gradient(180deg,var(--gold-bright),var(--gold)); color:var(--night); border-color:var(--gold-bright)}
+  .ans.wrong-pick{background:linear-gradient(180deg,var(--danger-bright),var(--danger)); border-color:var(--danger-bright)}
+  .ans.dim{opacity:.35}
+  #attack-zone{
+    display:none; position:relative; border-radius:14px; text-align:center; padding:26px 10px;
+    background:radial-gradient(circle at 50% 40%, rgba(217,164,65,.28), rgba(26,36,50,.9) 70%);
+    border:1.5px solid var(--gold); cursor:pointer; overflow:hidden;
+  }
+  #attack-zone .big{font-family:var(--serif); font-size:30px; font-weight:800; color:var(--gold-bright); letter-spacing:.2em}
+  #attack-zone .sub{font-size:12px; color:var(--parch-dim); margin-top:4px}
+  #attack-zone .crit-note{color:var(--gold-bright); font-weight:700}
+  .tapfx{position:absolute; width:14px; height:14px; border-radius:50%; background:var(--gold-bright); opacity:.85; pointer-events:none; animation:tapfx .45s forwards}
+  @keyframes tapfx{100%{transform:scale(4); opacity:0}}
+
+  /* トースト(レシーの一言) */
+  #toast{
+    position:absolute; left:14px; right:14px; bottom:calc(env(safe-area-inset-bottom) + 118px);
+    background:var(--parch); color:#2a2318; border-radius:10px; padding:10px 13px;
+    font-size:12.5px; line-height:1.6; box-shadow:0 8px 24px rgba(0,0,0,.5);
+    opacity:0; transform:translateY(8px); transition:.3s; pointer-events:none; z-index:40;
+  }
+  #toast.show{opacity:1; transform:none}
+  #toast b{color:#8a6420}
+
+  /* カットイン */
+  #cutin{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; z-index:60; opacity:0;
+  }
+  #cutin.go{animation:cutin 1.15s forwards}
+  #cutin .band{
+    width:150%; padding:20px 0; text-align:center; transform:rotate(-6deg);
+    background:linear-gradient(90deg, transparent, rgba(217,164,65,.95) 18%, rgba(240,200,105,.98) 50%, rgba(217,164,65,.95) 82%, transparent);
+    font-family:var(--serif); font-weight:800; font-size:40px; color:var(--night); letter-spacing:.12em;
+    text-shadow:0 1px 0 rgba(255,255,255,.5);
+  }
+  @keyframes cutin{0%{opacity:0; transform:scale(1.4)}12%{opacity:1; transform:scale(1)}80%{opacity:1}100%{opacity:0}}
+
+  /* 白フラッシュ */
+  #flash{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:55}
+  #flash.go{animation:flash .35s}
+  @keyframes flash{0%{opacity:.85}100%{opacity:0}}
+  #flash.gold{background:var(--gold-bright)}
+  #flash.red{background:var(--danger)}
+
+  /* ---------- リザルト ---------- */
+  #result{justify-content:center; padding:28px 22px; gap:0; text-align:center; overflow-y:auto}
+  .result-head{font-family:var(--serif); font-size:34px; font-weight:800; letter-spacing:.18em; color:var(--gold-bright); text-shadow:0 0 26px rgba(217,164,65,.4)}
+  .result-head.lose{color:var(--parch-dim); text-shadow:none}
+  .result-sub{font-size:13px; color:var(--parch-dim); margin-top:8px; line-height:1.8}
+  .stats{
+    margin:20px auto 0; width:min(100%,300px); border:1px solid var(--line); border-radius:12px;
+    background:rgba(26,36,50,.75); padding:6px 16px;
+  }
+  .stat-row{display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px dashed #2c3a52; font-size:13px; color:var(--parch-dim)}
+  .stat-row:last-child{border-bottom:none}
+  .stat-row b{font-family:var(--serif); font-size:19px; color:var(--parch)}
+  .stat-row b.gold{color:var(--gold-bright)}
+  .drops{margin:18px auto 0; width:min(100%,300px); display:flex; flex-direction:column; gap:8px}
+  .drop{
+    display:flex; align-items:center; gap:12px; border:1px solid var(--line); border-radius:12px;
+    padding:11px 14px; background:rgba(26,36,50,.75); text-align:left; opacity:0; transform:translateY(10px);
+    animation:dropIn .5s forwards;
+  }
+  .drop.rare{border-color:var(--gold); background:linear-gradient(90deg, rgba(217,164,65,.16), rgba(26,36,50,.8)); box-shadow:0 0 18px rgba(217,164,65,.25)}
+  .drop.epic{border-color:#b07fe0; background:linear-gradient(90deg, rgba(150,90,200,.2), rgba(26,36,50,.8)); box-shadow:0 0 18px rgba(160,100,220,.3)}
+  @keyframes dropIn{100%{opacity:1; transform:none}}
+  .drop .orb{width:34px; height:34px; border-radius:50%; flex:none; background:radial-gradient(circle at 35% 30%, #8fd0f5, var(--slime-deep))}
+  .drop.rare .orb{background:radial-gradient(circle at 35% 30%, var(--gold-bright), var(--gold-deep))}
+  .drop.epic .orb{background:radial-gradient(circle at 35% 30%, #d9b3ff, #5c3480)}
+  .drop .dname{font-size:14px; font-weight:700}
+  .drop .dtier{font-size:10.5px; letter-spacing:.2em; color:var(--parch-dim)}
+  .drop.rare .dtier{color:var(--gold-bright)}
+  .drop.epic .dtier{color:#c9a0ee}
+  #result .btn{margin:24px auto 0; width:min(78%,280px)}
+  #result .btn-ghost{margin:10px auto 0; width:min(78%,280px)}
+
+  /* ---------- 図鑑 ---------- */
+  #codex{background:rgba(9,13,19,.92); z-index:80; padding:0}
+  .codex-panel{
+    margin:auto; width:min(92%,420px); max-height:82vh; max-height:82dvh; display:flex; flex-direction:column;
+    background:var(--parch); color:#2a2318; border-radius:14px; overflow:hidden;
+  }
+  .codex-head{padding:16px 18px 12px; border-bottom:2px solid #d8cbb0}
+  .codex-head h2{font-family:var(--serif); font-size:20px; letter-spacing:.14em}
+  .codex-head .pct{font-size:12px; color:#8a6420; margin-top:4px}
+  .codex-list{overflow-y:auto; padding:8px 14px 14px}
+  .codex-item{padding:10px 4px; border-bottom:1px dashed #d8cbb0; font-size:13px; line-height:1.6}
+  .codex-item .ct{font-weight:800}
+  .codex-item .cb{color:#5c5342; font-size:12px}
+  .codex-item.unknown{color:#a99e88}
+  .codex-item.hint .ct{color:#b0642f}
+  .codex-item.hint .cb::before{content:"ヒント: "}
+  .codex-item.known .ct{color:#1f5c2e}
+  .codex-close{margin:0; border-radius:0; width:100%}
+</style>
+
+<div id="app">
+
+  <!-- タイトル -->
+  <div class="screen" id="title">
+    <div class="halo"></div>
+    <div class="title-eyebrow">TAX HUNTER — PROTOTYPE</div>
+    <div class="title-logo">看破<em>バトル</em></div>
+    <div class="title-sub">知識の欠片を撃ち込め。<br>正解だけが、魔物に届く一撃になる。</div>
+    <div class="title-quest">
+      <span class="tag">討伐依頼 No.001</span>
+      緑晶の草原に<b>青色スライム・アオイロン</b>が出現。<br>
+      問いを看破し、連続コンボで仕留めよ。
+    </div>
+    <button class="btn" id="btn-start">狩猟開始</button>
+    <button class="btn btn-ghost" id="btn-codex">大税典(図鑑)を開く</button>
+    <div class="title-note">検証版 / 音が出ます / データは端末にのみ保存</div>
+  </div>
+
+  <!-- バトル -->
+  <div class="screen hidden" id="battle">
+    <div id="stage">
+      <div class="topbar">
+        <div class="hp-block">
+          <div class="hp-label"><span>ハンター</span><span class="num" id="php-num">100</span></div>
+          <div class="bar" id="php-bar"><i></i></div>
+        </div>
+        <div id="combo-chip">連続看破<b class="num" id="combo-num">0</b></div>
+      </div>
+      <div id="enemy-zone">
+        <div id="enemy">
+          <div class="body"></div><div class="shine"></div>
+          <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
+          <div class="kanpa-ring" id="ring"></div>
+        </div>
+        <div class="enemy-name">青色スライム・アオイロン<small>ランクG</small></div>
+        <div id="ehp-wrap"><div class="bar" id="ehp-bar"><i></i></div></div>
+      </div>
+      <div id="qcard">
+        <div class="q-eyebrow" id="q-eyebrow">敵の問い</div>
+        <div id="qtext"></div>
+        <div id="timer"><i></i></div>
+      </div>
+      <div id="answers"></div>
+      <div id="attack-zone">
+        <div class="big">連打で攻撃!</div>
+        <div class="sub" id="attack-sub">看破の隙を突け</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- リザルト -->
+  <div class="screen hidden" id="result">
+    <div id="result-inner"></div>
+  </div>
+
+  <!-- 図鑑 -->
+  <div class="screen hidden" id="codex">
+    <div class="codex-panel">
+      <div class="codex-head">
+        <h2>大税典 — 所得の巻・序</h2>
+        <div class="pct" id="codex-pct"></div>
+      </div>
+      <div class="codex-list" id="codex-list"></div>
+      <button class="btn codex-close" id="btn-codex-close">閉じる</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="cutin"><div class="band" id="cutin-text">完全論破!!</div></div>
+  <div id="flash"></div>
+</div>
+
+<script>
+"use strict";
+/* ================= 問題データ(監修前・検証用) =================
+   本番は @law:年度:キー 参照に置換する(企画書 25.3 / 28節) */
+const QUESTIONS = [
+ {tag:"所得の十分類", q:"所得税の「所得」は、全部で何種類に分けられている?",
+  c:["5種類","8種類","10種類","12種類"], a:2,
+  exp:"給与・事業・利子・配当…所得は10種類。泉の色を見分けるのが狩りの基本。"},
+ {tag:"事業所得の計算", q:"事業所得の金額。正しい計算式はどれ?",
+  c:["総収入金額−必要経費","売上×税率","総収入金額−基礎控除","売上−生活費"], a:0,
+  exp:"事業所得=総収入金額−必要経費。生活費は経費にならない。"},
+ {tag:"源泉徴収", q:"給与から税金があらかじめ差し引かれて会社が納める仕組みを何と呼ぶ?",
+  c:["予定納税","源泉徴収","特別徴収","年末調整"], a:1,
+  exp:"支払う側が先に税を差し引いて納めるのが源泉徴収。"},
+ {tag:"確定申告の期限", q:"所得税の確定申告の期限は、原則いつまで?",
+  c:["翌年1月31日","翌年2月16日","翌年3月15日","翌年4月30日"], a:2,
+  exp:"原則、翌年2月16日〜3月15日に申告・納付。期限を破ると魔物が寄ってくる。"},
+ {tag:"青色申告特別控除", q:"青色申告特別控除。最も大きい控除額はいくら?",
+  c:["10万円","38万円","55万円","65万円"], a:3,
+  exp:"最高65万円。複式簿記+e-Tax申告(または優良な電子帳簿保存)が条件。"},
+ {tag:"65万控除の条件", q:"青色申告で65万円控除を受けるため、複式簿記に加えて必要なのは?",
+  c:["e-Tax申告または優良な電子帳簿保存","税理士への依頼","法人化","銀行口座の開設"], a:0,
+  exp:"複式簿記+期限内申告+e-Tax等。紙の郵送申告だけだと55万円止まり。"},
+ {tag:"55万円控除", q:"複式簿記で記帳したが、e-Tax等を使わず申告。青色申告特別控除はいくら?",
+  c:["65万円","55万円","10万円","0円"], a:1,
+  exp:"複式簿記でも電子要件を満たさなければ55万円。差の10万は電子化の祝福。"},
+ {tag:"開業届", q:"個人事業を始めたとき、開業届は事業開始から何か月以内に出す?",
+  c:["2週間以内","1か月以内","2か月以内","1年以内"], a:1,
+  exp:"開業届は1か月以内に納税地の税務署へ。青色承認申請とセットで覚える。"},
+ {tag:"医療費控除の足切り", q:"医療費控除。一般的な場合、年間の医療費がいくらを超えた分が対象?",
+  c:["5万円","10万円","20万円","30万円"], a:1,
+  exp:"原則10万円超(総所得金額等200万円未満ならその5%超)の部分が控除対象。"},
+ {tag:"消費税の標準税率", q:"いまの消費税の標準税率は?",
+  c:["5%","8%","10%","12%"], a:2,
+  exp:"標準税率10%。うち2.2%は地方消費税ぶん。"},
+ {tag:"軽減税率", q:"コンビニで弁当を買って持ち帰った。消費税率は?",
+  c:["8%","10%","0%","5%"], a:0,
+  exp:"持ち帰りの飲食料品は軽減税率8%。店内で食べると外食扱いで10%。"},
+ {tag:"住民税の課税方式", q:"住民税(所得割)は「いつの所得」に対して課税される?",
+  c:["今年の所得","前年の所得","過去3年の平均","来年の見込み所得"], a:1,
+  exp:"住民税は前年所得に課税。1月1日に住んでいた自治体から課される。"},
+ {tag:"相続税の基礎控除", q:"相続税の基礎控除。正しい式はどれ?",
+  c:["3,000万円+600万円×法定相続人の数","5,000万円+1,000万円×法定相続人の数","一律4,800万円","1億6,000万円"], a:0,
+  exp:"3,000万+600万×法定相続人の数。この結界を超えた財産に相続税がかかる。"},
+ {tag:"インボイス登録番号", q:"インボイス(適格請求書)の登録番号の形式は?",
+  c:["Tで始まる13桁の数字","Zで始まる10桁の数字","数字のみ8桁","アルファベット3文字"], a:0,
+  exp:"「T+13桁」が本物の刻印。ゴーレムの偽刻印はここで見抜く。"},
+ {tag:"20万円ルール", q:"給与を1か所からもらう会社員。副業などの所得がいくら以下なら所得税の確定申告が原則不要?",
+  c:["10万円以下","20万円以下","48万円以下","103万円以下"], a:1,
+  exp:"給与以外の所得20万円以下なら所得税の申告は原則不要。ただし住民税の申告は別途必要。"},
+ {tag:"ふるさと納税", q:"ふるさと納税で寄附した場合、控除を受けても残る自己負担額は原則いくら?",
+  c:["0円","1,000円","2,000円","5,000円"], a:2,
+  exp:"上限内なら自己負担は実質2,000円。返礼の恵みはその先にある。"},
+ {tag:"減価償却", q:"事業用の機械などの取得費用を、使う期間に分けて少しずつ経費にしていく仕組みは?",
+  c:["繰延資産","減価償却","損益通算","圧縮記帳"], a:1,
+  exp:"減価償却。湿地の足場が年数で沈むのと同じ理屈だ。"},
+ {tag:"経費の大原則", q:"支出を必要経費にできるかどうか。判断の大原則は?",
+  c:["レシートがあれば何でも可","事業に関連する支出かどうか","10万円未満かどうか","現金払いかどうか"], a:1,
+  exp:"核心は事業関連性。家事費(私生活の支出)は経費の門を通れない。"},
+ {tag:"電子帳簿保存法", q:"メールで受け取った請求書PDF。2024年からの原則の保存方法は?",
+  c:["印刷して紙で保存","電子データのまま保存","保存不要","手書きで転記"], a:1,
+  exp:"電子取引のデータは電子のまま保存が原則。紙に出して捨てるのは禁じ手。"},
+ {tag:"青色承認申請の期限", q:"今年から青色申告にしたい(1月開業ではない既存事業者)。承認申請書の提出期限は?",
+  c:["その年の3月15日まで","その年の12月31日まで","翌年3月15日まで","いつでもよい"], a:0,
+  exp:"原則その年の3月15日まで(新規開業なら開業から2か月以内)。"}
+];
+const FINISHER = {tag:"青色申告特別控除",
+  q:"複式簿記で記帳し、期限内にe-Taxで申告した。トドメだ——青色申告特別控除、その最高額は!?",
+  c:["10万円","38万円","55万円","65万円"], a:3,
+  exp:"65万円——完全看破。これがアオイロンの核心だ。"};
+
+/* ================= 状態 ================= */
+const E_MAX=900, P_MAX=100, ATTACK_MS=2800, TAP_CD=110;
+let eHP,pHP,streak,maxStreak,askedIdx,correctCount,totalAsked,battleStart,
+    currentQ,isFinisher,finisherDone,qStartTime,critMode,timerId,rushId,codexReturn="title",timers=[];
+let audioCtx=null;
+
+const $=id=>document.getElementById(id);
+const later=(fn,ms)=>{const t=setTimeout(fn,ms);timers.push(t);return t};
+const clearTimers=()=>{timers.forEach(clearTimeout);timers=[]};
+const rand=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const vibrate=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}};
+
+/* ================= サウンド(WebAudio自前生成) ================= */
+function ac(){if(!audioCtx){try{audioCtx=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+  if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume(); return audioCtx}
+function tone(f,t0,dur,type,vol){const c=ac();if(!c)return;
+  const o=c.createOscillator(),g=c.createGain();
+  o.type=type||"sine";o.frequency.setValueAtTime(f,c.currentTime+t0);
+  g.gain.setValueAtTime(0,c.currentTime+t0);
+  g.gain.linearRampToValueAtTime(vol||.18,c.currentTime+t0+.012);
+  g.gain.exponentialRampToValueAtTime(.001,c.currentTime+t0+dur);
+  o.connect(g).connect(c.destination);o.start(c.currentTime+t0);o.stop(c.currentTime+t0+dur+.05)}
+const sfx={
+  correct(){tone(660,0,.09,"triangle",.2);tone(880,.07,.1,"triangle",.2);tone(1320,.15,.16,"triangle",.16)},
+  wrong(){tone(160,0,.22,"sawtooth",.16);tone(110,.1,.3,"sawtooth",.14)},
+  hit(){tone(rand(180,260),0,.05,"square",.1);tone(90,0,.06,"triangle",.12)},
+  crit(){tone(520,0,.05,"square",.12);tone(1040,.02,.09,"triangle",.14)},
+  charge(){tone(330,0,.12,"sine",.08);tone(392,.12,.12,"sine",.08)},
+  cutin(){tone(523,0,.12,"triangle",.2);tone(659,.09,.12,"triangle",.2);tone(784,.18,.2,"triangle",.2);tone(1046,.3,.3,"triangle",.18)},
+  fanfare(){[[523,0],[659,.12],[784,.24],[1046,.38]].forEach(([f,t])=>tone(f,t,.28,"triangle",.2));tone(1318,.55,.5,"triangle",.16)},
+  lose(){tone(300,0,.25,"sine",.14);tone(240,.2,.3,"sine",.14);tone(180,.42,.5,"sine",.14)}
+};
+
+/* ================= 図鑑(localStorage) ================= */
+const CODEX_KEY="taxhunter_codex_v1";
+function codexLoad(){try{return JSON.parse(localStorage.getItem(CODEX_KEY))||{}}catch(e){return{}}}
+function codexMark(tag,st){const c=codexLoad();
+  if(st==="known"||c[tag]!=="known")c[tag]=st;
+  try{localStorage.setItem(CODEX_KEY,JSON.stringify(c))}catch(e){}}
+function codexRender(){const c=codexLoad(),list=$("codex-list");list.innerHTML="";
+  let known=0;
+  QUESTIONS.forEach(q=>{const st=c[q.tag]||"unknown";if(st==="known")known++;
+    const d=document.createElement("div");d.className="codex-item "+st;
+    d.innerHTML= st==="unknown"
+      ? '<div class="ct">??? — 未看破の頁</div>'
+      : '<div class="ct">'+q.tag+(st==="hint"?" <small>(頁の復元中)</small>":"")+'</div><div class="cb">'+q.exp+'</div>';
+    list.appendChild(d)});
+  $("codex-pct").textContent="復元率 "+Math.round(known/QUESTIONS.length*100)+"%("+known+"/"+QUESTIONS.length+"頁) — 頁は看破で復元、誤答でもヒントが残る";
+}
+
+/* ================= 画面制御 ================= */
+function show(id){["title","battle","result","codex"].forEach(s=>$(s).classList.toggle("hidden",s!==id));
+  if(id!=="battle")$("toast").classList.remove("show")}
+function toast(html,ms){const t=$("toast");t.innerHTML=html;t.classList.add("show");
+  later(()=>t.classList.remove("show"),ms||2200)}
+function flash(cls){const f=$("flash");f.className="";void f.offsetWidth;f.className="go "+(cls||"")}
+function shake(big){const s=$("stage");s.classList.remove("shake","shake-big");void s.offsetWidth;
+  s.classList.add(big?"shake-big":"shake")}
+function cutin(text){$("cutin-text").textContent=text;const c=$("cutin");
+  c.classList.remove("go");void c.offsetWidth;c.classList.add("go");sfx.cutin();vibrate([40,30,80])}
+function updateBars(){
+  $("php-bar").firstElementChild.style.width=Math.max(0,pHP/P_MAX*100)+"%";
+  $("ehp-bar").firstElementChild.style.width=Math.max(0,eHP/E_MAX*100)+"%";
+  $("php-num").textContent=Math.max(0,pHP);
+  $("combo-num").textContent=streak;
+  $("combo-chip").classList.toggle("hot",streak>=3)}
+function dmgNum(target,val,cls){const zone=$("enemy-zone"),d=document.createElement("div");
+  d.className="dmg "+(cls||"");d.textContent=val;
+  d.style.left=(target==="enemy"?rand(30,60):rand(15,35))+"%";
+  d.style.top=(target==="enemy"?rand(18,45):60)+"%";
+  zone.appendChild(d);later(()=>d.remove(),850)}
+
+/* ================= バトル進行 ================= */
+function startBattle(){
+  clearTimers();
+  eHP=E_MAX;pHP=P_MAX;streak=0;maxStreak=0;askedIdx=[];correctCount=0;totalAsked=0;
+  isFinisher=false;finisherDone=false;battleStart=Date.now();
+  $("enemy").className="";updateBars();show("battle");
+  later(nextQuestion,500);
+}
+function pickQuestion(){
+  if(askedIdx.length>=QUESTIONS.length)askedIdx=[]; // 出題し尽くしたら再周回
+  let i;do{i=totalAsked<QUESTIONS.length?totalAsked:rand(0,QUESTIONS.length-1)}while(askedIdx.includes(i));
+  askedIdx.push(i);return QUESTIONS[i];
+}
+function nextQuestion(){
+  if(pHP<=0)return;
+  currentQ=isFinisher?FINISHER:pickQuestion();
+  if(!isFinisher)totalAsked++;
+  const card=$("qcard");card.classList.toggle("finisher",isFinisher);
+  $("q-eyebrow").textContent=isFinisher?"トドメの一問 — 核心を撃て":"敵の問い";
+  $("qtext").textContent=currentQ.q;
+  sfx.charge();
+  // 選択肢
+  const box=$("answers");box.innerHTML="";box.style.display="grid";$("attack-zone").style.display="none";
+  currentQ.c.forEach((c,i)=>{const b=document.createElement("button");
+    b.className="ans";b.textContent=c;
+    b.addEventListener("pointerdown",()=>answer(i,b),{passive:true});
+    box.appendChild(b)});
+  // タイマー
+  const limit=isFinisher?15000:(totalAsked<=5?12000:9000);
+  const bar=$("timer");bar.classList.remove("rush");
+  const inner=bar.firstElementChild;
+  inner.style.transition="none";inner.style.width="100%";void inner.offsetWidth;
+  inner.style.transition="width "+limit+"ms linear";inner.style.width="0%";
+  qStartTime=Date.now();
+  clearTimeout(timerId);clearTimeout(rushId);
+  rushId=later(()=>bar.classList.add("rush"),limit*.65);
+  timerId=later(()=>answer(-1,null),limit);
+}
+function lockAnswers(picked,ok){
+  [...document.querySelectorAll(".ans")].forEach((b,i)=>{
+    b.style.pointerEvents="none";
+    if(i===currentQ.a)b.classList.add("right");
+    else if(b===picked&&!ok)b.classList.add("wrong-pick");
+    else b.classList.add("dim")});
+}
+function answer(i,btn){
+  clearTimeout(timerId);clearTimeout(rushId);
+  const inner=$("timer").firstElementChild;
+  inner.style.transition="none";
+  const ok=i===currentQ.a;
+  lockAnswers(btn,ok);
+  ok?onCorrect():onWrong(i===-1);
+}
+function onCorrect(){
+  const speed=Date.now()-qStartTime;
+  critMode=speed<=3500;
+  streak++;maxStreak=Math.max(maxStreak,streak);
+  if(!isFinisher)correctCount++;
+  codexMark(currentQ.tag,"known");
+  sfx.correct();vibrate(35);flash("gold");
+  const ring=$("ring");ring.classList.remove("go");void ring.offsetWidth;ring.classList.add("go");
+  $("enemy").classList.add("stunned");
+  updateBars();
+  if(streak===5)later(()=>cutin("完全論破!!"),300);
+  toast("<b>看破!</b> "+currentQ.exp,2600);
+  if(isFinisher){later(finisherHit,700);return}
+  later(attackPhase,streak===5?1300:550);
+}
+function attackPhase(){
+  $("answers").style.display="none";
+  const zone=$("attack-zone");zone.style.display="block";
+  $("attack-sub").innerHTML=critMode?'<span class="crit-note">即答会心! 会心率アップ!</span>':"看破の隙を突け";
+  let lastTap=0,ended=false;
+  const mult=1+Math.min(streak,5)*0.2;
+  const onTap=e=>{
+    const now=Date.now();if(ended||now-lastTap<TAP_CD)return;lastTap=now;
+    const crit=Math.random()<(critMode?0.55:0.18);
+    const dmg=Math.round(rand(5,9)*mult*(crit?1.5:1));
+    eHP-=dmg;updateBars();
+    crit?sfx.crit():sfx.hit();vibrate(crit?25:12);
+    dmgNum("enemy",dmg,crit?"crit":"");shake(false);
+    const fx=document.createElement("div");fx.className="tapfx";
+    fx.style.left=(e.offsetX||zone.clientWidth/2)-7+"px";fx.style.top=(e.offsetY||40)-7+"px";
+    zone.appendChild(fx);later(()=>fx.remove(),480);
+    if(eHP<=1&&!finisherDone){ended=true;eHP=1;updateBars();later(startFinisher,450)}
+  };
+  zone.onpointerdown=onTap;
+  later(()=>{if(ended)return;ended=true;zone.onpointerdown=null;
+    $("enemy").classList.remove("stunned");
+    if(eHP<=0)victory();else later(nextQuestion,350)},ATTACK_MS);
+}
+function startFinisher(){
+  isFinisher=true;finisherDone=true;
+  $("attack-zone").style.display="none";
+  $("enemy").classList.remove("stunned");
+  cutin("トドメの一問");
+  later(nextQuestion,1100);
+}
+function finisherHit(){
+  eHP=0;updateBars();
+  flash("gold");shake(true);sfx.fanfare();vibrate([60,40,120]);
+  $("enemy").className="dead";
+  later(()=>victory(true),1300);
+}
+function onWrong(isTimeout){
+  streak=0;critMode=false;
+  codexMark(currentQ.tag,"hint");
+  sfx.wrong();vibrate([70,50,70]);
+  $("enemy").classList.remove("stunned");
+  later(()=>{
+    $("enemy").classList.add("lunge");flash("red");shake(true);
+    const dmg=rand(16,24);pHP-=dmg;updateBars();
+    dmgNum("player","-"+dmg,"hurt");
+    later(()=>$("enemy").classList.remove("lunge"),550);
+  },500);
+  toast((isTimeout?"<b>時間切れ…</b> ":"<b>被弾!</b> ")+"正解は「"+currentQ.c[currentQ.a]+"」。"+currentQ.exp,3000);
+  if(isFinisher){ // トドメ失敗 → 敵が力を取り戻す
+    isFinisher=false;eHP=90;
+    later(()=>{updateBars();toast("<b>アオイロンが力を取り戻した!</b> もう一度隙を作れ!",2200)},1200);
+  }
+  later(()=>{updateBars();pHP<=0?defeat():nextQuestion()},1600);
+}
+
+/* ================= リザルト ================= */
+function rollDrops(finisherBonus){
+  const boost=maxStreak*8+(finisherBonus?15:0);
+  const drops=[{name:"青色の粘液 ×3",tier:"COMMON — 素材",cls:""}];
+  if(Math.random()*100<15+boost)
+    drops.push({name:"青色申告書の頁",tier:"RARE — 知識装備の素材",cls:"rare"});
+  if(Math.random()*100<2+boost/4)
+    drops.push({name:"判例の欠片「電子帳簿の光」",tier:"EPIC — 判例級",cls:"epic"});
+  return{drops,boost};
+}
+function victory(finisherBonus){
+  clearTimers();
+  const sec=Math.round((Date.now()-battleStart)/1000);
+  const rate=totalAsked?Math.round(correctCount/totalAsked*100):0;
+  const {drops,boost}=rollDrops(finisherBonus);
+  const inner=$("result-inner");
+  inner.innerHTML=
+    '<div class="result-head">討伐完了</div>'+
+    '<div class="result-sub">青色スライム・アオイロンを狩った。<br>大税典の頁が復元されていく——</div>'+
+    '<div class="stats">'+
+      '<div class="stat-row"><span>討伐タイム</span><b class="num">'+Math.floor(sec/60)+"分"+(sec%60)+"秒</b></div>"+
+      '<div class="stat-row"><span>看破率</span><b class="num">'+rate+"%("+correctCount+"/"+totalAsked+")</b></div>"+
+      '<div class="stat-row"><span>最大コンボ</span><b class="num gold">'+maxStreak+"連続看破</b></div>"+
+      '<div class="stat-row"><span>知識ブースト</span><b class="num gold">ドロップ率 +'+boost+"%</b></div>"+
+    "</div>"+
+    '<div class="drops">'+drops.map((d,i)=>
+      '<div class="drop '+d.cls+'" style="animation-delay:'+(0.25+i*0.5)+'s">'+
+        '<div class="orb"></div><div><div class="dname">'+d.name+'</div><div class="dtier">'+d.tier+"</div></div></div>").join("")+
+    "</div>"+
+    '<button class="btn" id="btn-again">もう一狩り行く</button>'+
+    '<button class="btn btn-ghost" id="btn-result-codex">大税典を確認する</button>';
+  show("result");
+  $("btn-again").addEventListener("pointerdown",startBattle);
+  $("btn-result-codex").addEventListener("pointerdown",()=>{codexReturn="result";codexRender();show("codex")});
+}
+function defeat(){
+  clearTimers();sfx.lose();
+  const c=codexLoad();
+  const hints=QUESTIONS.filter(q=>c[q.tag]&&c[q.tag]!=="unknown").length;
+  const inner=$("result-inner");
+  inner.innerHTML=
+    '<div class="result-head lose">力尽きた…</div>'+
+    '<div class="result-sub">だが無駄ではない。誤答した問いの<b>ヒントが大税典に刻まれた</b>。<br>頁は '+hints+"/"+QUESTIONS.length+' 枚。次の狩りは、もっと深く刺さる。</div>'+
+    '<button class="btn" id="btn-again">再挑戦する</button>'+
+    '<button class="btn btn-ghost" id="btn-result-codex">大税典を確認する</button>';
+  show("result");
+  $("btn-again").addEventListener("pointerdown",startBattle);
+  $("btn-result-codex").addEventListener("pointerdown",()=>{codexReturn="result";codexRender();show("codex")});
+}
+
+/* ================= 起動 ================= */
+$("btn-start").addEventListener("pointerdown",()=>{ac();startBattle()});
+$("btn-codex").addEventListener("pointerdown",()=>{codexReturn="title";codexRender();show("codex")});
+$("btn-codex-close").addEventListener("pointerdown",()=>show(codexReturn));
+</script>
+</body>
+</html>
