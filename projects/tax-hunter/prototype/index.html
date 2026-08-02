@@ -75,6 +75,32 @@
   #title .btn-ghost{margin-top:12px; width:min(78%,300px)}
   .title-note{margin-top:18px; font-size:11px; color:#5d6b82}
 
+  /* ---------- フィールド ---------- */
+  #field{padding:0}
+  #fcanvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block}
+  .field-hud{
+    position:absolute; top:calc(env(safe-area-inset-top) + 10px); left:12px; right:12px;
+    display:flex; align-items:center; gap:8px; pointer-events:none;
+  }
+  .chip{
+    font-size:12px; font-weight:700; letter-spacing:.1em; color:var(--parch);
+    background:rgba(16,22,31,.78); border:1px solid var(--line); border-radius:999px;
+    padding:7px 13px;
+  }
+  .chip.gold{color:var(--gold-bright); border-color:var(--gold-deep)}
+  #btn-field-codex{pointer-events:auto; cursor:pointer; margin-left:auto; font-family:var(--sans)}
+  .field-hint{
+    position:absolute; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 18px);
+    text-align:center; font-size:12px; color:var(--parch-dim); text-shadow:0 1px 4px #000;
+    pointer-events:none; transition:opacity .6s;
+  }
+  #encounter{
+    position:absolute; inset:0; z-index:70; pointer-events:none; opacity:0;
+    background:radial-gradient(circle at 50% 50%, transparent 0%, #06090d 55%);
+  }
+  #encounter.go{animation:iris .75s forwards}
+  @keyframes iris{0%{opacity:0; transform:scale(2.6)}100%{opacity:1; transform:scale(1)}}
+
   /* ---------- バトル ---------- */
   #battle{padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 12px)}
   #stage{display:flex; flex-direction:column; height:100%; gap:8px}
@@ -158,7 +184,8 @@
   #timer.rush > i{background:var(--danger-bright)}
 
   /* 回答・攻撃 */
-  #answers{display:grid; grid-template-columns:1fr 1fr; gap:9px}
+  #answers{display:grid; grid-template-columns:1fr 1fr; gap:9px; transition:opacity .45s}
+  #answers.arming{opacity:.45; pointer-events:none}
   .ans{
     font-family:var(--sans); font-size:14.5px; font-weight:700; line-height:1.4; color:var(--parch);
     background:rgba(26,36,50,.9); border:1px solid var(--line); border-radius:12px;
@@ -272,12 +299,23 @@
     <div class="title-sub">知識の欠片を撃ち込め。<br>正解だけが、魔物に届く一撃になる。</div>
     <div class="title-quest">
       <span class="tag">討伐依頼 No.001</span>
-      緑晶の草原に<b>青色スライム・アオイロン</b>が出現。<br>
-      問いを看破し、連続コンボで仕留めよ。
+      緑晶の草原に<b>青色スライム</b>の群れが出現。<br>
+      草原を探索し、問いを看破して仕留めよ。
     </div>
-    <button class="btn" id="btn-start">狩猟開始</button>
+    <button class="btn" id="btn-start">草原へ出る</button>
     <button class="btn btn-ghost" id="btn-codex">大税典(図鑑)を開く</button>
     <div class="title-note">検証版 / 音が出ます / データは端末にのみ保存</div>
+  </div>
+
+  <!-- フィールド -->
+  <div class="screen hidden" id="field">
+    <canvas id="fcanvas"></canvas>
+    <div class="field-hud">
+      <div class="chip">緑晶の草原</div>
+      <div class="chip gold num" id="chip-pick">徴憑 0</div>
+      <button class="chip" id="btn-field-codex">大税典</button>
+    </div>
+    <div class="field-hint" id="field-hint">画面をドラッグして移動 — 光は徴憑、魔物に近づくと戦闘!</div>
   </div>
 
   <!-- バトル -->
@@ -332,6 +370,7 @@
   <div id="toast"></div>
   <div id="cutin"><div class="band" id="cutin-text">完全論破!!</div></div>
   <div id="flash"></div>
+  <div id="encounter"></div>
 </div>
 
 <script>
@@ -408,7 +447,8 @@ const FINISHER = {tag:"青色申告特別控除",
 /* ================= 状態 ================= */
 const E_MAX=900, P_MAX=100, ATTACK_MS=2800, TAP_CD=110;
 let eHP,pHP,streak,maxStreak,askedIdx,correctCount,totalAsked,battleStart,
-    currentQ,isFinisher,finisherDone,qStartTime,critMode,timerId,rushId,codexReturn="title",timers=[];
+    currentQ,isFinisher,finisherDone,qStartTime,critMode,timerId,rushId,codexReturn="title",timers=[],
+    armed=false,currentEnemyIdx=-1;
 let audioCtx=null;
 
 const $=id=>document.getElementById(id);
@@ -456,7 +496,7 @@ function codexRender(){const c=codexLoad(),list=$("codex-list");list.innerHTML="
 }
 
 /* ================= 画面制御 ================= */
-function show(id){["title","battle","result","codex"].forEach(s=>$(s).classList.toggle("hidden",s!==id));
+function show(id){["title","field","battle","result","codex"].forEach(s=>$(s).classList.toggle("hidden",s!==id));
   if(id!=="battle")$("toast").classList.remove("show")}
 function toast(html,ms){const t=$("toast");t.innerHTML=html;t.classList.add("show");
   later(()=>t.classList.remove("show"),ms||2200)}
@@ -498,22 +538,28 @@ function nextQuestion(){
   $("q-eyebrow").textContent=isFinisher?"トドメの一問 — 核心を撃て":"敵の問い";
   $("qtext").textContent=currentQ.q;
   sfx.charge();
-  // 選択肢
-  const box=$("answers");box.innerHTML="";box.style.display="grid";$("attack-zone").style.display="none";
+  // 選択肢(表示直後0.6秒は構え時間 — 連打の誤タップを受け付けない)
+  armed=false;
+  const box=$("answers");box.innerHTML="";box.style.display="grid";box.classList.add("arming");
+  $("attack-zone").style.display="none";
   currentQ.c.forEach((c,i)=>{const b=document.createElement("button");
     b.className="ans";b.textContent=c;
     b.addEventListener("pointerdown",()=>answer(i,b),{passive:true});
     box.appendChild(b)});
-  // タイマー
+  // タイマー(構えが解けてから走り出す)
   const limit=isFinisher?15000:(totalAsked<=5?12000:9000);
   const bar=$("timer");bar.classList.remove("rush");
   const inner=bar.firstElementChild;
-  inner.style.transition="none";inner.style.width="100%";void inner.offsetWidth;
-  inner.style.transition="width "+limit+"ms linear";inner.style.width="0%";
-  qStartTime=Date.now();
+  inner.style.transition="none";inner.style.width="100%";
   clearTimeout(timerId);clearTimeout(rushId);
-  rushId=later(()=>bar.classList.add("rush"),limit*.65);
-  timerId=later(()=>answer(-1,null),limit);
+  later(()=>{
+    armed=true;box.classList.remove("arming");
+    void inner.offsetWidth;
+    inner.style.transition="width "+limit+"ms linear";inner.style.width="0%";
+    qStartTime=Date.now();
+    rushId=later(()=>bar.classList.add("rush"),limit*.65);
+    timerId=later(()=>answer(-1,null),limit);
+  },600);
 }
 function lockAnswers(picked,ok){
   [...document.querySelectorAll(".ans")].forEach((b,i)=>{
@@ -523,6 +569,8 @@ function lockAnswers(picked,ok){
     else b.classList.add("dim")});
 }
 function answer(i,btn){
+  if(!armed)return;
+  armed=false;
   clearTimeout(timerId);clearTimeout(rushId);
   const inner=$("timer").firstElementChild;
   inner.style.transition="none";
@@ -629,10 +677,10 @@ function victory(finisherBonus){
       '<div class="drop '+d.cls+'" style="animation-delay:'+(0.25+i*0.5)+'s">'+
         '<div class="orb"></div><div><div class="dname">'+d.name+'</div><div class="dtier">'+d.tier+"</div></div></div>").join("")+
     "</div>"+
-    '<button class="btn" id="btn-again">もう一狩り行く</button>'+
+    '<button class="btn" id="btn-return">草原に戻る</button>'+
     '<button class="btn btn-ghost" id="btn-result-codex">大税典を確認する</button>';
   show("result");
-  $("btn-again").addEventListener("pointerdown",startBattle);
+  $("btn-return").addEventListener("pointerdown",()=>returnToField(true));
   $("btn-result-codex").addEventListener("pointerdown",()=>{codexReturn="result";codexRender();show("codex")});
 }
 function defeat(){
@@ -643,17 +691,220 @@ function defeat(){
   inner.innerHTML=
     '<div class="result-head lose">力尽きた…</div>'+
     '<div class="result-sub">だが無駄ではない。誤答した問いの<b>ヒントが大税典に刻まれた</b>。<br>頁は '+hints+"/"+QUESTIONS.length+' 枚。次の狩りは、もっと深く刺さる。</div>'+
-    '<button class="btn" id="btn-again">再挑戦する</button>'+
+    '<button class="btn" id="btn-return">草原へ逃げ延びる</button>'+
     '<button class="btn btn-ghost" id="btn-result-codex">大税典を確認する</button>';
   show("result");
-  $("btn-again").addEventListener("pointerdown",startBattle);
+  $("btn-return").addEventListener("pointerdown",()=>returnToField(false));
   $("btn-result-codex").addEventListener("pointerdown",()=>{codexReturn="result";codexRender();show("codex")});
 }
 
+/* ================= フィールド(緑晶の草原) ================= */
+const F={W:1800,H:1400},SPEED=185;
+const fcv=$("fcanvas"),fctx=fcv.getContext("2d");
+let fieldRun=false,fLast=0,VW=0,VH=0,hintShown=false;
+const player={x:900,y:820,dir:1,moving:false,step:0};
+const joy={on:false,sx:0,sy:0,dx:0,dy:0};
+const enemies=[
+  {x:600,y:520,seed:1,alive:true,cool:0,ox:0,oy:0},
+  {x:1320,y:700,seed:2,alive:true,cool:0,ox:0,oy:0},
+  {x:860,y:1160,seed:3,alive:true,cool:0,ox:0,oy:0}
+];
+const PICKUP_NAMES=["領収書","請求書","通帳の写し","レジの記録"];
+let pickups=[],pickCount=0;
+function initPickups(){pickups=[{x:420,y:930},{x:1500,y:420},{x:1220,y:1210},{x:690,y:300}]
+  .map((p,i)=>({x:p.x,y:p.y,taken:false,name:PICKUP_NAMES[i%4]}))}
+initPickups();
+/* 装飾は固定シードで散布(毎回同じ草原になる) */
+function mulberry(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;
+  let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296}}
+const rng=mulberry(20260802);
+const crystals=[],rocks=[],tufts=[];
+for(let i=0;i<26;i++)crystals.push({x:rng()*F.W,y:rng()*F.H,s:8+rng()*14,tw:rng()*6.28});
+for(let i=0;i<18;i++)rocks.push({x:rng()*F.W,y:rng()*F.H,s:9+rng()*16});
+for(let i=0;i<170;i++)tufts.push({x:rng()*F.W,y:rng()*F.H,s:5+rng()*9,h:rng()});
+
+function resizeField(){const dpr=Math.min(2,window.devicePixelRatio||1);
+  VW=fcv.clientWidth;VH=fcv.clientHeight;
+  fcv.width=VW*dpr;fcv.height=VH*dpr;fctx.setTransform(dpr,0,0,dpr,0,0)}
+window.addEventListener("resize",resizeField);
+
+fcv.addEventListener("pointerdown",e=>{joy.on=true;joy.sx=e.clientX;joy.sy=e.clientY;joy.dx=0;joy.dy=0});
+window.addEventListener("pointermove",e=>{if(joy.on){joy.dx=e.clientX-joy.sx;joy.dy=e.clientY-joy.sy}});
+window.addEventListener("pointerup",()=>{joy.on=false;joy.dx=0;joy.dy=0});
+window.addEventListener("pointercancel",()=>{joy.on=false;joy.dx=0;joy.dy=0});
+
+function enterField(){
+  ac();show("field");resizeField();
+  $("chip-pick").textContent="徴憑 "+pickCount;
+  if(!hintShown){hintShown=true;later(()=>$("field-hint").style.opacity="0",7000)}
+  if(enemies.every(e=>!e.alive))
+    later(()=>{if(!fieldRun)return;
+      enemies.forEach(e=>{e.alive=true;e.cool=2.5});initPickups();
+      toast("<b>気配が戻った。</b>魔物と徴憑が再び現れた——リポップだ。",2800)},6000);
+  if(!fieldRun){fieldRun=true;fLast=performance.now();requestAnimationFrame(fieldLoop)}
+}
+function leaveFieldToBattle(idx){
+  currentEnemyIdx=idx;fieldRun=false;joy.on=false;joy.dx=joy.dy=0;
+  sfx.cutin();vibrate([30,30,60]);
+  const en=$("encounter");en.classList.remove("go");void en.offsetWidth;en.classList.add("go");
+  setTimeout(()=>{en.classList.remove("go");startBattle()},700);
+}
+function returnToField(won){
+  if(currentEnemyIdx>=0){
+    const en=enemies[currentEnemyIdx];
+    if(won)en.alive=false;
+    else{en.cool=3.5; // 敗走: 敵から距離を取って再開
+      const ang=Math.atan2(player.y-en.y,player.x-en.x)||1;
+      player.x=Math.max(40,Math.min(F.W-40,en.x+Math.cos(ang)*190));
+      player.y=Math.max(40,Math.min(F.H-40,en.y+Math.sin(ang)*190));
+    }
+  }
+  currentEnemyIdx=-1;enterField();
+}
+
+function fieldLoop(now){
+  if(!fieldRun)return;
+  const dt=Math.min(.05,(now-fLast)/1000);fLast=now;
+  const t=now/1000;
+  const mag=Math.hypot(joy.dx,joy.dy);
+  if(joy.on&&mag>12){
+    const cap=Math.min(mag,80)/80,nx=joy.dx/mag,ny=joy.dy/mag;
+    player.x=Math.max(30,Math.min(F.W-30,player.x+nx*SPEED*cap*dt));
+    player.y=Math.max(30,Math.min(F.H-30,player.y+ny*SPEED*cap*dt));
+    if(Math.abs(nx)>.2)player.dir=nx<0?-1:1;
+    player.moving=true;player.step+=dt*10*cap;
+  }else player.moving=false;
+  enemies.forEach((en,i)=>{
+    if(!en.alive)return;
+    if(en.cool>0)en.cool-=dt;
+    en.ox=Math.sin(t*.55+en.seed*2.1)*48;en.oy=Math.cos(t*.42+en.seed*1.7)*36;
+    if(fieldRun&&en.cool<=0&&Math.hypot(player.x-(en.x+en.ox),player.y-(en.y+en.oy))<46)
+      leaveFieldToBattle(i);
+  });
+  pickups.forEach(p=>{
+    if(!p.taken&&Math.hypot(player.x-p.x,player.y-p.y)<34){
+      p.taken=true;pickCount++;$("chip-pick").textContent="徴憑 "+pickCount;
+      sfx.correct();vibrate(25);
+      toast("<b>徴憑を拾った:</b> "+p.name+" — いずれ推理の鍵になる。",2200);
+    }
+  });
+  drawField(t);
+  if(fieldRun)requestAnimationFrame(fieldLoop);
+}
+
+function inView(x,y,camX,camY,m){return x>camX-m&&x<camX+VW+m&&y>camY-m&&y<camY+VH+m}
+function drawField(t){
+  const camX=Math.max(0,Math.min(F.W-VW,player.x-VW/2));
+  const camY=Math.max(0,Math.min(F.H-VH,player.y-VH/2));
+  fctx.fillStyle="#131f17";fctx.fillRect(0,0,VW,VH);
+  fctx.save();fctx.translate(-camX,-camY);
+  // 草
+  fctx.lineWidth=2;
+  tufts.forEach(g=>{if(!inView(g.x,g.y,camX,camY,30))return;
+    const sway=Math.sin(t*1.3+g.x*.05)*2.4;
+    fctx.strokeStyle=g.h>.5?"#1d3325":"#254331";
+    fctx.beginPath();fctx.moveTo(g.x,g.y);
+    fctx.quadraticCurveTo(g.x+sway,g.y-g.s,g.x+sway*1.7,g.y-g.s*1.7);fctx.stroke();
+    fctx.beginPath();fctx.moveTo(g.x+4,g.y);
+    fctx.quadraticCurveTo(g.x+4-sway,g.y-g.s*.8,g.x+4-sway*1.5,g.y-g.s*1.3);fctx.stroke();
+  });
+  // 岩
+  rocks.forEach(r=>{if(!inView(r.x,r.y,camX,camY,40))return;
+    fctx.fillStyle="#25313c";
+    fctx.beginPath();fctx.ellipse(r.x,r.y,r.s,r.s*.62,0,0,7);fctx.fill();
+    fctx.fillStyle="#2f3f4d";
+    fctx.beginPath();fctx.ellipse(r.x-r.s*.25,r.y-r.s*.25,r.s*.5,r.s*.3,0,0,7);fctx.fill();
+  });
+  // 緑晶(この草原の名の由来)
+  crystals.forEach(c=>{if(!inView(c.x,c.y,camX,camY,50))return;
+    const glow=.45+.35*Math.sin(t*1.8+c.tw);
+    fctx.save();fctx.translate(c.x,c.y);
+    fctx.globalAlpha=glow*.35;
+    fctx.fillStyle="#58d9a0";
+    fctx.beginPath();fctx.arc(0,-c.s*.5,c.s*1.6,0,7);fctx.fill();
+    fctx.globalAlpha=1;
+    fctx.fillStyle="rgba(88,217,160,"+(0.55+glow*.4)+")";
+    fctx.beginPath();fctx.moveTo(0,-c.s*1.7);fctx.lineTo(c.s*.55,-c.s*.4);
+    fctx.lineTo(c.s*.3,0);fctx.lineTo(-c.s*.3,0);fctx.lineTo(-c.s*.55,-c.s*.4);
+    fctx.closePath();fctx.fill();
+    fctx.fillStyle="rgba(230,255,242,"+(0.25+glow*.3)+")";
+    fctx.beginPath();fctx.moveTo(0,-c.s*1.7);fctx.lineTo(c.s*.2,-c.s*.5);fctx.lineTo(-c.s*.2,-c.s*.5);
+    fctx.closePath();fctx.fill();
+    fctx.restore();
+  });
+  // 徴憑(金の輝き)
+  pickups.forEach(p=>{if(p.taken||!inView(p.x,p.y,camX,camY,40))return;
+    const pu=.5+.5*Math.sin(t*3+p.x);
+    fctx.save();fctx.translate(p.x,p.y-4*pu);
+    fctx.globalAlpha=.35+pu*.3;
+    fctx.fillStyle="#f0c869";fctx.beginPath();fctx.arc(0,0,16,0,7);fctx.fill();
+    fctx.globalAlpha=1;fctx.fillStyle="#f7e3ae";
+    fctx.fillRect(-6,-8,12,15);
+    fctx.strokeStyle="#b98f3e";fctx.lineWidth=1;
+    fctx.beginPath();fctx.moveTo(-3,-4);fctx.lineTo(3,-4);fctx.moveTo(-3,0);fctx.lineTo(3,0);fctx.moveTo(-3,4);fctx.lineTo(1,4);fctx.stroke();
+    fctx.restore();
+  });
+  // 魔物
+  enemies.forEach(en=>{
+    if(!en.alive)return;
+    const ex=en.x+en.ox,ey=en.y+en.oy;
+    if(!inView(ex,ey,camX,camY,60))return;
+    fctx.fillStyle="rgba(0,0,0,.3)";
+    fctx.beginPath();fctx.ellipse(ex,ey+16,22,7,0,0,7);fctx.fill();
+    const sq=1+Math.sin(t*2.2+en.seed)*0.07;
+    fctx.save();fctx.translate(ex,ey);fctx.scale(1,sq);
+    const g=fctx.createRadialGradient(-8,-14,4,0,0,30);
+    g.addColorStop(0,"#8fd0f5");g.addColorStop(.5,"#4aa3d9");g.addColorStop(1,"#255e85");
+    fctx.fillStyle=g;
+    fctx.beginPath();fctx.moveTo(-24,8);
+    fctx.quadraticCurveTo(-27,-20,0,-22);fctx.quadraticCurveTo(27,-20,24,8);
+    fctx.quadraticCurveTo(0,17,-24,8);fctx.fill();
+    fctx.fillStyle="rgba(255,255,255,.7)";
+    fctx.beginPath();fctx.ellipse(-9,-12,6,3.4,-.4,0,7);fctx.fill();
+    fctx.fillStyle="#122531";
+    fctx.beginPath();fctx.ellipse(-7,-4,2.6,3.6,0,0,7);fctx.ellipse(7,-4,2.6,3.6,0,0,7);fctx.fill();
+    fctx.restore();
+    // 接近警告「!」
+    if(en.cool<=0&&Math.hypot(player.x-ex,player.y-ey)<120){
+      fctx.fillStyle="#f0c869";fctx.font="bold 22px serif";fctx.textAlign="center";
+      fctx.fillText("!",ex,ey-34-Math.abs(Math.sin(t*6))*5);
+    }
+  });
+  // ハンター(主人公)
+  {
+    const x=player.x,y=player.y;
+    const bob=player.moving?Math.sin(player.step*2)*2.6:Math.sin(t*1.5)*1.2;
+    fctx.fillStyle="rgba(0,0,0,.35)";
+    fctx.beginPath();fctx.ellipse(x,y+15,13,5,0,0,7);fctx.fill();
+    fctx.save();fctx.translate(x,y+bob);fctx.scale(player.dir,1);
+    fctx.fillStyle="#2a3550"; // 外套
+    fctx.beginPath();fctx.moveTo(0,-16);fctx.quadraticCurveTo(13,-6,10,13);
+    fctx.lineTo(-10,13);fctx.quadraticCurveTo(-13,-6,0,-16);fctx.fill();
+    fctx.fillStyle="#d9a441"; // 税紋の襟巻
+    fctx.fillRect(-8,-15,16,4);
+    fctx.beginPath();fctx.moveTo(-8,-13);fctx.quadraticCurveTo(-16,-8,-14,0);
+    fctx.lineTo(-11,-2);fctx.quadraticCurveTo(-12,-8,-7,-11);fctx.fill();
+    fctx.fillStyle="#e8d7b0"; // 顔
+    fctx.beginPath();fctx.arc(1,-22,6.5,0,7);fctx.fill();
+    fctx.fillStyle="#324066"; // フード
+    fctx.beginPath();fctx.arc(0,-24,8.5,Math.PI*.75,Math.PI*2.1);fctx.fill();
+    fctx.restore();
+  }
+  fctx.restore();
+  // 月光ビネット
+  const v=fctx.createRadialGradient(VW/2,VH*.42,VH*.2,VW/2,VH*.5,VH*.85);
+  v.addColorStop(0,"rgba(0,0,0,0)");v.addColorStop(1,"rgba(4,8,12,.55)");
+  fctx.fillStyle=v;fctx.fillRect(0,0,VW,VH);
+}
+
 /* ================= 起動 ================= */
-$("btn-start").addEventListener("pointerdown",()=>{ac();startBattle()});
+$("btn-start").addEventListener("pointerdown",()=>enterField());
 $("btn-codex").addEventListener("pointerdown",()=>{codexReturn="title";codexRender();show("codex")});
-$("btn-codex-close").addEventListener("pointerdown",()=>show(codexReturn));
+$("btn-field-codex").addEventListener("pointerdown",()=>{
+  codexReturn="field";fieldRun=false;codexRender();show("codex")});
+$("btn-codex-close").addEventListener("pointerdown",()=>{
+  codexReturn==="field"?enterField():show(codexReturn)});
 </script>
 </body>
 </html>
