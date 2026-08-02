@@ -14,7 +14,7 @@
 - `baseline.md` — スタート時点の現在地分析(随時更新)
 - `daily/YYYY-MM-DD.md` — 日次ログ
 - `templates/daily-template.md` — 日次テンプレ
-- `decisions/` — 重要な意思決定の記録(後日追加)
+- `decisions/` — 重要な意思決定の記録
 
 ## 進め方
 
