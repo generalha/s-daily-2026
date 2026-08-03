@@ -9,14 +9,15 @@
  * 使い方は同じフォルダの README.md を参照してください。
  *
  * 【運用の考え方（超重要）】
- * ・フォームは「注文者（お客様）」が入力するもの。仕入れ値や支払い状況など
- *   社内管理の情報はフォームに含めない（お客様に見せない・入力させない）。
- * ・仕入れ価格・国内送料・支払い状況・発送状況・発送方法・重量・追跡番号は、
- *   注文が入った後に妻が『回答』シートのI〜O列に直接入力する（プルダウン付き）。
+ * ・フォームは「注文者（お客様）」が入力するもの。項目は商品選択・数量・
+ *   発送に必要な最低限の情報（お届け先住所・電話番号）に絞っている。
+ * ・販売価格や仕入れ値など、お客様の入力ミスや原価漏えいのリスクがある項目は
+ *   フォームに含めない。注文が入った後に妻が『回答』シートの管理欄に直接入力する。
+ * ・お届け先住所・電話番号は発送に必須のため今回は例外的にフォームで収集する。
+ *   このシートには個人情報が入るため、共有範囲は必ず妻（自分）だけに絞ること。
  * ・注文ID、円換算売上、粗利益、利益率、EMS用コピペ、案内文の下書きは
  *   すべて数式（ARRAYFORMULA）で自動計算されるので、
  *   トリガーの設定やスクリプトの実行は最初の1回だけでOK。
- * ・住所・電話番号など機微情報の項目はこのフォームには含めていません。
  * ・EMSラベルへの自動入力は行いません。「EMS用コピペ欄」をコピーして
  *   手作業でEMSの発送手続き画面に貼り付ける想定です。
  */
@@ -102,6 +103,8 @@ function setupKantoTsumaSystem() {
   Logger.log('フォーム編集URL: ' + form.getEditUrl());
   Logger.log('フォーム回答URL(注文者に共有する画面): ' + form.getPublishedUrl());
   Logger.log('スプレッドシートURL: ' + ss.getUrl());
+  Logger.log('注意: 回答シートにはお届け先住所・電話番号が入ります。' +
+    'スプレッドシートの共有設定は自分（妻）だけに限定してください。');
 }
 
 // ============================================================
@@ -130,9 +133,9 @@ function createOrderForm_() {
     .setChoiceValues(['戰鬥陀螺', '童鞋', '周邊商品', '食品', 'その他'])
     .setRequired(true);
 
-  // ---- 商品名・型番（短文・必須） ----
+  // ---- ご希望の商品（短文・必須） ----
   form.addTextItem()
-    .setTitle('商品名・型番')
+    .setTitle('ご希望の商品（商品名・型番）')
     .setRequired(true);
 
   // ---- 数量（数値・必須） ----
@@ -141,12 +144,18 @@ function createOrderForm_() {
     .setRequired(true)
     .setValidation(numberValidation_());
 
-  // ---- 販売価格（台湾ドル）（数値・必須） ----
-  // ご案内済みの金額をそのままご入力いただく想定です。
+  // ---- お届け先住所（段落・必須） ----
+  // EMS発送に必要な最低限の情報として、価格の代わりにこちらを収集する。
+  form.addParagraphTextItem()
+    .setTitle('お届け先住所（台湾）')
+    .setHelpText('郵便番号・都市名・区/郷鎮名・詳細住所までご記入ください。')
+    .setRequired(true);
+
+  // ---- お届け先電話番号（短文・必須） ----
   form.addTextItem()
-    .setTitle('販売価格（台湾ドル）')
-    .setRequired(true)
-    .setValidation(numberValidation_());
+    .setTitle('お届け先電話番号')
+    .setHelpText('半角数字とハイフンでご記入ください（例：0912-345-678）。')
+    .setRequired(true);
 
   // ---- メモ（段落・任意） ----
   form.addParagraphTextItem()
@@ -165,66 +174,69 @@ function numberValidation_() {
 }
 
 // ============================================================
-// 2. 回答シート：妻が入力する管理列（I〜O）のセットアップ
+// 2. 回答シート：妻が入力する管理列（J〜Q）のセットアップ
 // ============================================================
 
 /**
- * フォームの質問は A〜H列に自動で入る（A列はタイムスタンプ）。
+ * フォームの質問は A〜I列に自動で入る（A列はタイムスタンプ）。
  *   A タイムスタンプ
  *   B 注文者名
  *   C 販売先
  *   D 商品カテゴリー
- *   E 商品名・型番
+ *   E ご希望の商品（商品名・型番）
  *   F 数量
- *   G 販売価格（台湾ドル）
- *   H メモ
+ *   G お届け先住所（台湾）
+ *   H お届け先電話番号
+ *   I メモ
  *
- * この関数はその右側 I〜O列に、仕入れ値・送料・支払い状況・発送状況・
- * 発送方法・重量・追跡番号の「妻が注文確認後に入力する管理欄」を追加する。
+ * この関数はその右側 J〜Q列に、販売価格・仕入れ値・送料・支払い状況・
+ * 発送状況・発送方法・重量・追跡番号の「妻が注文確認後に入力する管理欄」を追加する。
+ * 販売価格は、注文者の入力ミスを避けるためあえてフォームに含めず、
+ * 妻がLINE等でのやり取りをもとに確定額をここへ入力する運用にしている。
  * 支払い状況／発送状況／発送方法はプルダウンにしてあるので、
  * クリックして選ぶだけで入力できる（入力ミス防止）。
  * 見分けやすいように背景色を薄い黄色にしている。
  */
 function setupStaffManagedColumns_(sheet) {
   var headers = [
-    '仕入れ価格（日本円）', '国内送料（日本円）', '支払い状況',
+    '販売価格（台湾ドル）', '仕入れ価格（日本円）', '国内送料（日本円）', '支払い状況',
     '発送状況', '発送方法', '重量（グラム）', '追跡番号'
   ];
-  sheet.getRange(1, 9, 1, headers.length).setValues([headers]); // I1〜O1
+  sheet.getRange(1, 10, 1, headers.length).setValues([headers]); // J1〜Q1
 
   var lastRow = sheet.getMaxRows();
 
-  // 支払い状況（K列）のプルダウン
+  // 支払い状況（M列）のプルダウン
   var paymentRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['未請求', '請求済み', '一部入金', '入金済み'], true)
     .setAllowInvalid(false)
     .build();
-  sheet.getRange(2, 11, lastRow - 1, 1).setDataValidation(paymentRule); // K2:K
+  sheet.getRange(2, 13, lastRow - 1, 1).setDataValidation(paymentRule); // M2:M
 
-  // 発送状況（L列）のプルダウン
+  // 発送状況（N列）のプルダウン
   var shippingRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['未発送', '同梱待ち', '梱包済み', '発送済み'], true)
     .setAllowInvalid(false)
     .build();
-  sheet.getRange(2, 12, lastRow - 1, 1).setDataValidation(shippingRule); // L2:L
+  sheet.getRange(2, 14, lastRow - 1, 1).setDataValidation(shippingRule); // N2:N
 
-  // 発送方法（M列）のプルダウン
+  // 発送方法（O列）のプルダウン
   var methodRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['未定', 'EMS', '国際小包航空便', 'その他'], true)
     .setAllowInvalid(false)
     .build();
-  sheet.getRange(2, 13, lastRow - 1, 1).setDataValidation(methodRule); // M2:M
+  sheet.getRange(2, 15, lastRow - 1, 1).setDataValidation(methodRule); // O2:O
 
   // 「妻が入力する欄」だとひと目で分かるよう薄い黄色を付ける
-  sheet.getRange(1, 9, lastRow, 7).setBackground('#fff2cc');
+  sheet.getRange(1, 10, lastRow, 8).setBackground('#fff2cc');
 }
 
 // ============================================================
-// 3. 回答シート：自動計算列（P〜V）のセットアップ
+// 3. 回答シート：自動計算列（R〜X）のセットアップ
 // ============================================================
 
 /**
- * P〜V列に、注文ID・円換算売上・粗利益・利益率・EMS用コピペ・
+ * R〜X列に、注文ID・円換算売上・粗利益・利益率・EMS用コピペ・
  * 案内文の下書きをARRAYFORMULA（数式）で自動追加する。
  * ARRAYFORMULAを2行目に1つ入れておけば、フォームで新しい回答が
  * 追加されるたびに自動で計算されるので、その都度スクリプトを
@@ -235,69 +247,72 @@ function setupComputedColumns_(sheet) {
     '注文ID', '為替レート（使用値）', '売上（円換算）', '粗利益（円）', '利益率',
     'EMS用コピペ', '案内文の下書き'
   ];
-  sheet.getRange(1, 16, 1, headers.length).setValues([headers]); // P1〜V1
+  sheet.getRange(1, 18, 1, headers.length).setValues([headers]); // R1〜X1
 
   // 注文ID：KT-0001 のような連番
-  sheet.getRange('P2').setFormula(
+  sheet.getRange('R2').setFormula(
     '=ARRAYFORMULA(IF(A2:A="","","KT-"&TEXT(ROW(A2:A)-1,"0000")))'
   );
 
   // 為替レート（使用値）：設定シートの値をそのまま反映
-  sheet.getRange('Q2').setFormula(
+  sheet.getRange('S2').setFormula(
     '=ARRAYFORMULA(IF(A2:A="","",' + SHEET_NAME_SETTINGS + '!$B$2))'
   );
 
-  // 売上（円換算）＝ 販売価格（台湾ドル） ÷ 為替レート
-  sheet.getRange('R2').setFormula(
-    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(G2:G/Q2:Q,"")))'
+  // 売上（円換算）＝ 販売価格（台湾ドル・J列） ÷ 為替レート
+  sheet.getRange('T2').setFormula(
+    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(J2:J/S2:S,"")))'
   );
 
-  // 粗利益（円）＝ 売上（円換算） − 仕入れ価格(I) − 国内送料(J)（未入力は0扱い）
-  sheet.getRange('S2').setFormula(
-    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(R2:R-N(I2:I)-N(J2:J),"")))'
+  // 粗利益（円）＝ 売上（円換算） − 仕入れ価格(K) − 国内送料(L)（未入力は0扱い）
+  sheet.getRange('U2').setFormula(
+    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(T2:T-N(K2:K)-N(L2:L),"")))'
   );
 
   // 利益率 ＝ 粗利益 ÷ 売上（円換算）
-  sheet.getRange('T2').setFormula(
-    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(S2:S/R2:R,"")))'
+  sheet.getRange('V2').setFormula(
+    '=ARRAYFORMULA(IF(A2:A="","",IFERROR(U2:U/T2:T,"")))'
   );
 
-  // EMS用コピペ欄：注文者・商品名・数量・発送方法(M)・重量(N)・販売価格(G)・メモ(H)を1行に整形
-  sheet.getRange('U2').setFormula(
+  // EMS用コピペ欄：注文者・商品名・数量・発送方法(O)・重量(P)・販売価格(J)・
+  // お届け先住所(G)・電話(H)・メモ(I) を1行に整形
+  sheet.getRange('W2').setFormula(
     '=ARRAYFORMULA(IF(A2:A="","",' +
-      'B2:B&" ｜ "&E2:E&" x"&F2:F&"個 ｜ 発送方法:"&IF(M2:M="","未定",M2:M)&' +
-      '" ｜ 重量:"&IF(N2:N="","未計測",N2:N&"g")&" ｜ 販売価格:NT$"&G2:G&' +
-      '" ｜ メモ:"&IF(H2:H="","なし",H2:H)))'
+      'B2:B&" ｜ "&E2:E&" x"&F2:F&"個 ｜ 発送方法:"&IF(O2:O="","未定",O2:O)&' +
+      '" ｜ 重量:"&IF(P2:P="","未計測",P2:P&"g")&" ｜ 販売価格:NT$"&J2:J&' +
+      '" ｜ 住所:"&G2:G&" ｜ 電話:"&H2:H&' +
+      '" ｜ メモ:"&IF(I2:I="","なし",I2:I)))'
   );
 
   // 案内文の下書き：お客さん向けにそのままコピペできる文面
-  sheet.getRange('V2').setFormula(
+  sheet.getRange('X2').setFormula(
     '=ARRAYFORMULA(IF(A2:A="","",' +
       'B2:B&"様"&CHAR(10)&CHAR(10)&' +
       '"この度はご注文いただきありがとうございます。"&CHAR(10)&' +
       '"内容を確認しましたのでご案内いたします。"&CHAR(10)&CHAR(10)&' +
       '"商品名："&E2:E&CHAR(10)&' +
       '"数量："&F2:F&"個"&CHAR(10)&' +
-      '"商品代金：NT$"&G2:G&CHAR(10)&' +
-      '"発送方法："&IF(M2:M="","未定",M2:M)&CHAR(10)&' +
+      '"商品代金：NT$"&J2:J&CHAR(10)&' +
+      '"発送方法："&IF(O2:O="","未定",O2:O)&CHAR(10)&' +
+      '"お届け先："&G2:G&CHAR(10)&' +
       '"送料につきましては、梱包完了後にあらためてご案内いたします。"&CHAR(10)&CHAR(10)&' +
       '"引き続きどうぞよろしくお願いいたします。"))'
   );
 
   // 見た目を整える
   sheet.setFrozenRows(1);
-  sheet.getRange(1, 1, 1, 22).setFontWeight('bold'); // A〜V見出しを太字
-  sheet.setColumnWidth(21, 320); // U列（EMS用コピペ）を広めに
-  sheet.setColumnWidth(22, 380); // V列（案内文）を広めに
-  sheet.getRange('V2:V').setWrap(true);
-  sheet.getRange('U2:U').setWrap(true);
-  sheet.getRange('T2:T').setNumberFormat('0.0%');
-  sheet.getRange('R2:R').setNumberFormat('¥#,##0');
-  sheet.getRange('S2:S').setNumberFormat('¥#,##0');
+  sheet.getRange(1, 1, 1, 24).setFontWeight('bold'); // A〜X見出しを太字
+  sheet.setColumnWidth(23, 320); // W列（EMS用コピペ）を広めに
+  sheet.setColumnWidth(24, 380); // X列（案内文）を広めに
+  sheet.getRange('W2:W').setWrap(true);
+  sheet.getRange('X2:X').setWrap(true);
+  sheet.getRange('V2:V').setNumberFormat('0.0%');
+  sheet.getRange('T2:T').setNumberFormat('¥#,##0');
+  sheet.getRange('U2:U').setNumberFormat('¥#,##0');
 
-  // 数式が入っているP〜V列を誤って上書きしないよう「警告」を出す
-  // （ブロックはしない＝奥さんが困らないよう、警告のみに留める）
-  var protectedRange = sheet.getRange(2, 16, sheet.getMaxRows() - 1, 7); // P2:V最終行
+  // 数式が入っているR〜X列を誤って上書きしないよう「警告」を出す
+  // （ブロックはしない＝妻が困らないよう、警告のみに留める）
+  var protectedRange = sheet.getRange(2, 18, sheet.getMaxRows() - 1, 7); // R2:X最終行
   var protection = protectedRange.protect();
   protection.setWarningOnly(true);
   protection.setDescription('自動計算欄です。数式を消さないよう注意してください。');
@@ -373,23 +388,23 @@ function setupDashboardSheet_(sheet) {
 
   // ---- サマリー ----
   sheet.getRange('A4').setValue('総売上（円換算）');
-  sheet.getRange('B4').setFormula('=SUM(' + R + '!R2:R)');
+  sheet.getRange('B4').setFormula('=SUM(' + R + '!T2:T)');
   sheet.getRange('B4').setNumberFormat('¥#,##0');
 
   sheet.getRange('A5').setValue('総粗利益（円）');
-  sheet.getRange('B5').setFormula('=SUM(' + R + '!S2:S)');
+  sheet.getRange('B5').setFormula('=SUM(' + R + '!U2:U)');
   sheet.getRange('B5').setNumberFormat('¥#,##0');
 
   // 未入金＝支払い状況が「入金済み」以外（未記入の新規注文も含む）
   sheet.getRange('A6').setValue('未入金件数（入金済み以外）');
   sheet.getRange('B6').setFormula(
-    '=COUNTIFS(' + R + '!B2:B,"<>",' + R + '!K2:K,"<>入金済み")'
+    '=COUNTIFS(' + R + '!B2:B,"<>",' + R + '!M2:M,"<>入金済み")'
   );
 
   // 未発送＝発送状況が「発送済み」以外（未記入の新規注文も含む）
   sheet.getRange('A7').setValue('未発送件数（発送済み以外）');
   sheet.getRange('B7').setFormula(
-    '=COUNTIFS(' + R + '!B2:B,"<>",' + R + '!L2:L,"<>発送済み")'
+    '=COUNTIFS(' + R + '!B2:B,"<>",' + R + '!N2:N,"<>発送済み")'
   );
 
   sheet.getRange('A4:A7').setFontWeight('bold');
@@ -397,17 +412,17 @@ function setupDashboardSheet_(sheet) {
   // ---- 商品別売上ランキング ----
   sheet.getRange('A9').setValue('商品別 売上ランキング（円換算）').setFontWeight('bold');
   sheet.getRange('A10').setFormula(
-    '=IFERROR(QUERY(' + R + '!A2:V,' +
-    '"select E, sum(R) where E is not null group by E order by sum(R) desc ' +
-    'label E \'商品名・型番\', sum(R) \'売上合計（円）\'"),"データがまだありません")'
+    '=IFERROR(QUERY(' + R + '!A2:X,' +
+    '"select E, sum(T) where E is not null group by E order by sum(T) desc ' +
+    'label E \'商品名・型番\', sum(T) \'売上合計（円）\'"),"データがまだありません")'
   );
 
   // ---- 商品別粗利益ランキング ----
   sheet.getRange('D9').setValue('商品別 粗利益ランキング（円）').setFontWeight('bold');
   sheet.getRange('D10').setFormula(
-    '=IFERROR(QUERY(' + R + '!A2:V,' +
-    '"select E, sum(S) where E is not null group by E order by sum(S) desc ' +
-    'label E \'商品名・型番\', sum(S) \'粗利益合計（円）\'"),"データがまだありません")'
+    '=IFERROR(QUERY(' + R + '!A2:X,' +
+    '"select E, sum(U) where E is not null group by E order by sum(U) desc ' +
+    'label E \'商品名・型番\', sum(U) \'粗利益合計（円）\'"),"データがまだありません")'
   );
 
   sheet.setColumnWidth(1, 260);
