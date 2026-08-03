@@ -197,32 +197,10 @@
   }
   .kanpa-ring.go{animation:ring .55s ease-out forwards}
   @keyframes ring{0%{opacity:1; width:20px; height:20px}100%{opacity:0; width:190px; height:190px}}
-  /* 自機(ハンター後ろ姿) */
-  #hunter{position:absolute; left:12%; bottom:28px; width:86px; height:96px}
-  #hunter .cloak{
-    position:absolute; left:50%; bottom:0; width:64px; height:62px; transform:translateX(-50%);
-    background:linear-gradient(180deg,#3a4a76,#2a3550);
-    border-radius:46% 46% 30% 30% / 70% 70% 22% 22%;
-    box-shadow:inset -8px -6px 0 rgba(0,0,0,.18);
-  }
-  #hunter .scarf{
-    position:absolute; left:50%; bottom:52px; width:52px; height:12px; transform:translateX(-50%);
-    background:linear-gradient(180deg,var(--gold-bright),var(--gold)); border-radius:6px;
-  }
-  #hunter .scarf::after{
-    content:""; position:absolute; right:-12px; top:2px; width:22px; height:8px;
-    background:var(--gold); border-radius:4px; transform:rotate(14deg);
-  }
-  #hunter .hood{
-    position:absolute; left:50%; bottom:56px; width:42px; height:40px; transform:translateX(-50%);
-    background:linear-gradient(180deg,#43548a,#324066);
-    border-radius:50% 50% 42% 42%;
-    box-shadow:inset -6px -4px 0 rgba(0,0,0,.2);
-  }
-  #hunter .hood::after{ /* フードの先 */
-    content:""; position:absolute; top:-8px; left:50%; width:12px; height:14px; transform:translateX(-50%) rotate(6deg);
-    background:#43548a; border-radius:50% 50% 20% 20%;
-  }
+  /* 自機(エリアン後ろ姿・SVG) */
+  #hunter{position:absolute; left:9%; bottom:20px; width:98px; height:118px;
+    filter:drop-shadow(0 6px 4px rgba(0,0,0,.25))}
+  #hunter svg{width:100%; height:100%; display:block}
 
   .dmg{
     position:absolute; font-family:var(--serif); font-weight:800; font-size:26px; color:#fffce8;
@@ -399,14 +377,32 @@
           <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
           <div class="kanpa-ring" id="ring"></div>
         </div>
-        <div id="hunter"><div class="cloak"></div><div class="scarf"></div><div class="hood"></div></div>
+        <div id="hunter"><svg viewBox="0 0 100 122" aria-hidden="true">
+          <rect x="36" y="102" width="11" height="16" rx="3" fill="#5d4632"/>
+          <rect x="53" y="102" width="11" height="16" rx="3" fill="#5d4632"/>
+          <path d="M28 42 Q13 74 24 108 Q54 118 88 101 Q96 66 72 40 Q50 30 28 42Z" fill="#c8402e"/>
+          <path d="M60 44 Q80 72 73 105 L88 101 Q96 66 72 40Z" fill="#a53324"/>
+          <path d="M37 37 Q50 31 63 37 L61 46 Q50 41 39 46Z" fill="#2e57a8"/>
+          <path d="M37 37 Q50 31 63 37 L62 41 Q50 36 38 41Z" fill="#d9a441" opacity=".85"/>
+          <ellipse cx="32" cy="41" rx="10" ry="7" fill="#8b939c"/>
+          <ellipse cx="68" cy="41" rx="10" ry="7" fill="#8b939c"/>
+          <rect x="44" y="28" width="12" height="9" fill="#e8c39a"/>
+          <path d="M32 22 Q33 8 50 8 Q67 8 68 22 Q69 30 63 32 L58 26 L54 33 L49 26 L44 32 L38 27 Q31 29 32 22Z" fill="#6b4a2f"/>
+          <polygon points="26,88 32,92 66,42 60,38" fill="#aeb6bf"/>
+          <polygon points="60,38 66,42 68,34" fill="#8b939c"/>
+          <rect x="56" y="28" width="16" height="5" rx="2" transform="rotate(36 64 30)" fill="#4c2e16"/>
+          <rect x="66" y="20" width="5" height="12" rx="2" transform="rotate(36 68 26)" fill="#6b4a2f"/>
+          <circle cx="72" cy="18" r="4" fill="#8b939c"/>
+          <path d="M10 46 Q10 42 16 42 L30 42 Q34 42 34 46 L34 62 Q34 73 22 79 Q10 73 10 62 Z" fill="#7a4a26" stroke="#4c2e16" stroke-width="2.5"/>
+          <path d="M17 52 Q22 46 28 52 Q29 60 22 66 Q15 60 17 52Z" fill="#d9a441"/>
+        </svg></div>
         <div id="book"><div class="bcover"></div><div class="bspine"></div><div class="bgem"></div></div>
         <div class="binfo enemy-i">
           <div class="bname">アオイロン<small>ランク:G</small></div>
           <div class="bhp"><span class="hptag">HP</span><div class="bar" id="ehp-bar"><i></i></div></div>
         </div>
         <div class="binfo player-i">
-          <div class="bname">ハンター<small>Lv:1</small></div>
+          <div class="bname">エリアン<small>Lv:1</small></div>
           <div class="bhp"><span class="hptag">HP</span><div class="bar" id="php-bar"><i></i></div><span class="num" id="php-num">100</span></div>
           <div id="combo-chip">連続看破 <b class="num" id="combo-num">0</b></div>
         </div>
@@ -531,6 +527,17 @@ const PARTY_KEY="taxhunter_party_v1";
 function partyLoad(){try{return JSON.parse(localStorage.getItem(PARTY_KEY))||[]}catch(e){return[]}}
 function partySave(){try{localStorage.setItem(PARTY_KEY,JSON.stringify(party))}catch(e){}}
 let party=partyLoad();
+
+/* 生涯正答率 → 仲間の進化段階 */
+const STATS_KEY="taxhunter_stats_v1",EVO_KEY="taxhunter_evo_v1";
+let stats=(()=>{try{return JSON.parse(localStorage.getItem(STATS_KEY))||{c:0,t:0}}catch(e){return{c:0,t:0}}})();
+function recordAnswer(ok){stats.t++;if(ok)stats.c++;
+  try{localStorage.setItem(STATS_KEY,JSON.stringify(stats))}catch(e){}}
+function evoStage(){const r=stats.t?stats.c/stats.t:0;
+  if(stats.t>=20&&r>=.8)return 3;
+  if(stats.t>=10&&r>=.6)return 2;
+  return 1}
+const EVO_NAMES={1:"アオイロン",2:"アオイロン・ブルーム",3:"アオイロン・クラウン"};
 let audioCtx=null;
 
 const $=id=>document.getElementById(id);
@@ -664,6 +671,7 @@ function answer(i,btn){
   const inner=$("timer").firstElementChild;
   inner.style.transition="none";
   const ok=i===currentQ.a;
+  recordAnswer(ok);
   lockAnswers(btn,ok);
   ok?onCorrect():onWrong(i===-1);
 }
@@ -864,6 +872,17 @@ const player={x:900,y:820,dir:1,moving:false,step:0};
 const joy={on:false,sx:0,sy:0,dx:0,dy:0};
 /* 仲間の隊列: 一定距離ごとに足跡を記録し、後続がなぞる */
 const trail=[];let lastSample={x:player.x,y:player.y};
+function followerPositions(){
+  const nF=Math.min(party.length,3),arr=[];
+  for(let i=0;i<nF;i++){
+    const idx=trail.length-1-(i+1)*7;
+    arr.push(idx>=0?trail[idx]:(trail[0]||{x:player.x-28*(i+1)*player.dir,y:player.y+6}));
+  }
+  return arr;
+}
+/* 仲間のひとこと */
+const BUDDY_LINES=["けいひ? けいひ!","65まんえん!","レシート ひろお","あるこ〜♪","いんぼいす〜","ぷるぷる…","あおいろ しんこく!","ぬしさま つよい","こうじょ だいじ","きちょう しよ?"];
+const bubbles=[];
 const enemies=[
   {x:600,y:520,seed:1,alive:true,cool:0,ox:0,oy:0},
   {x:1320,y:700,seed:2,alive:true,cool:0,ox:0,oy:0},
@@ -899,6 +918,13 @@ function enterField(){
   $("chip-pick").textContent="徴憑 "+pickCount;
   const pc=$("chip-party");
   if(party.length){pc.style.display="";pc.textContent="仲間 "+party.length}else pc.style.display="none";
+  // 進化チェック(正答率が育つと仲間の姿が変わる)
+  if(party.length){
+    const st=evoStage(),prev=+(localStorage.getItem(EVO_KEY)||1);
+    if(st>prev)later(()=>{cutin("進化!!");
+      toast("<b>『"+EVO_NAMES[st]+"』へ進化!</b> 看破率"+Math.round(stats.c/stats.t*100)+"%——知識の力が仲間に宿った。",3400)},800);
+    if(st!==prev)try{localStorage.setItem(EVO_KEY,String(st))}catch(e){}
+  }
   if(!hintShown){hintShown=true;later(()=>$("field-hint").style.opacity="0",7000)}
   if(enemies.every(e=>!e.alive))
     later(()=>{if(!fieldRun)return;
@@ -948,6 +974,14 @@ function fieldLoop(now){
     if(fieldRun&&en.cool<=0&&Math.hypot(player.x-(en.x+en.ox),player.y-(en.y+en.oy))<46)
       leaveFieldToBattle(i);
   });
+  // 仲間のひとこと(歩いているとき、時折)
+  for(let i=0;i<Math.min(party.length,3);i++){
+    let b=bubbles[i]||(bubbles[i]={text:"",until:0,next:now+2500+Math.random()*5000});
+    if(player.moving&&now>=b.next){
+      b.text=BUDDY_LINES[Math.floor(Math.random()*BUDDY_LINES.length)];
+      b.until=now+2400;b.next=now+2400+6000+Math.random()*9000;
+    }
+  }
   pickups.forEach(p=>{
     if(!p.taken&&Math.hypot(player.x-p.x,player.y-p.y)<34){
       p.taken=true;pickCount++;$("chip-pick").textContent="徴憑 "+pickCount;
@@ -960,14 +994,16 @@ function fieldLoop(now){
 }
 
 function inView(x,y,camX,camY,m){return x>camX-m&&x<camX+VW+m&&y>camY-m&&y<camY+VH+m}
-function drawSlimeAt(ex,ey,t,seed,scale){
+function drawSlimeAt(ex,ey,t,seed,scale,stage){
+  stage=stage||1;
   fctx.save();fctx.translate(ex,ey);fctx.scale(scale,scale);
   fctx.fillStyle="rgba(0,0,0,.3)";
   fctx.beginPath();fctx.ellipse(0,16,22,7,0,0,7);fctx.fill();
   const sq=1+Math.sin(t*2.2+seed)*0.07;
   fctx.scale(1,sq);
   const g=fctx.createRadialGradient(-8,-14,4,0,0,30);
-  g.addColorStop(0,"#8fd0f5");g.addColorStop(.5,"#4aa3d9");g.addColorStop(1,"#255e85");
+  if(stage>=3){g.addColorStop(0,"#ffe9b0");g.addColorStop(.5,"#e8b54d");g.addColorStop(1,"#9a7422")}
+  else{g.addColorStop(0,"#8fd0f5");g.addColorStop(.5,"#4aa3d9");g.addColorStop(1,"#255e85")}
   fctx.fillStyle=g;
   fctx.beginPath();fctx.moveTo(-24,8);
   fctx.quadraticCurveTo(-27,-20,0,-22);fctx.quadraticCurveTo(27,-20,24,8);
@@ -976,7 +1012,39 @@ function drawSlimeAt(ex,ey,t,seed,scale){
   fctx.beginPath();fctx.ellipse(-9,-12,6,3.4,-.4,0,7);fctx.fill();
   fctx.fillStyle="#122531";
   fctx.beginPath();fctx.ellipse(-7,-4,2.6,3.6,0,0,7);fctx.ellipse(7,-4,2.6,3.6,0,0,7);fctx.fill();
+  if(stage===2){ // 芽生え: 頭に緑晶の若葉
+    fctx.strokeStyle="#3f8f5f";fctx.lineWidth=2.4;
+    fctx.beginPath();fctx.moveTo(0,-21);fctx.quadraticCurveTo(1,-27,3,-30);fctx.stroke();
+    fctx.fillStyle="#58d9a0";
+    fctx.beginPath();fctx.ellipse(5,-32,6,3.6,-.5,0,7);fctx.fill();
+    fctx.beginPath();fctx.ellipse(-1,-31,4.5,2.8,.6,0,7);fctx.fill();
+  }
+  if(stage>=3){ // 王冠+きらめき
+    fctx.fillStyle="#d9a441";
+    fctx.beginPath();fctx.moveTo(-9,-20);fctx.lineTo(-9,-30);fctx.lineTo(-4.5,-24);
+    fctx.lineTo(0,-32);fctx.lineTo(4.5,-24);fctx.lineTo(9,-30);fctx.lineTo(9,-20);
+    fctx.closePath();fctx.fill();
+    fctx.fillStyle="#f7e3ae";
+    fctx.beginPath();fctx.arc(0,-26,1.8,0,7);fctx.fill();
+    const sp=.5+.5*Math.sin(t*3.2+seed*2);
+    fctx.globalAlpha=sp;fctx.strokeStyle="#ffe9b0";fctx.lineWidth=1.6;
+    fctx.beginPath();fctx.moveTo(18,-24);fctx.lineTo(18,-16);fctx.moveTo(14,-20);fctx.lineTo(22,-20);fctx.stroke();
+    fctx.globalAlpha=1;
+  }
   fctx.restore();
+}
+function drawBubble(x,y,text){
+  fctx.font="bold 11px -apple-system,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif";
+  const w=fctx.measureText(text).width+16,h=21,bx=x-w/2,by=y-56;
+  fctx.fillStyle="rgba(246,241,220,.96)";fctx.strokeStyle="#2e2e44";fctx.lineWidth=1.5;
+  fctx.beginPath();
+  if(fctx.roundRect)fctx.roundRect(bx,by,w,h,6);else fctx.rect(bx,by,w,h);
+  fctx.fill();fctx.stroke();
+  fctx.beginPath();fctx.moveTo(x-4,by+h-1);fctx.lineTo(x+4,by+h-1);fctx.lineTo(x,by+h+6);
+  fctx.closePath();fctx.fill();fctx.stroke();
+  fctx.fillStyle="#2e2e44";fctx.textAlign="center";fctx.textBaseline="middle";
+  fctx.fillText(text,x,by+h/2+.5);
+  fctx.textBaseline="alphabetic";
 }
 function drawField(t){
   const camX=Math.max(0,Math.min(F.W-VW,player.x-VW/2));
@@ -1041,32 +1109,55 @@ function drawField(t){
       fctx.fillText("!",ex,ey-34-Math.abs(Math.sin(t*6))*5);
     }
   });
-  // 仲間の隊列(最大3体表示)
-  const nF=Math.min(party.length,3);
-  for(let i=0;i<nF;i++){
-    const idx=trail.length-1-(i+1)*7;
-    const p=idx>=0?trail[idx]
-      :(trail[0]||{x:player.x-28*(i+1)*player.dir,y:player.y+6});
-    drawSlimeAt(p.x,p.y,t+i*.8,i*3+1,.62);
-  }
-  // ハンター(主人公)
+  // 仲間の隊列(最大3体表示)+ 吹き出し
+  const fpos=followerPositions(),st=evoStage();
+  fpos.forEach((p,i)=>drawSlimeAt(p.x,p.y,t+i*.8,i*3+1,.62,st));
+  fpos.forEach((p,i)=>{const b=bubbles[i];
+    if(b&&b.text&&performance.now()<b.until)drawBubble(p.x,p.y,b.text)});
+  // エリアン(主人公)
   {
     const x=player.x,y=player.y;
-    const bob=player.moving?Math.sin(player.step*2)*2.6:Math.sin(t*1.5)*1.2;
+    const bob=player.moving?Math.sin(player.step*2)*2.2:Math.sin(t*1.5)*1;
+    const swing=player.moving?Math.sin(player.step*2)*3:0;
     fctx.fillStyle="rgba(0,0,0,.35)";
-    fctx.beginPath();fctx.ellipse(x,y+15,13,5,0,0,7);fctx.fill();
+    fctx.beginPath();fctx.ellipse(x,y+16,12,4.5,0,0,7);fctx.fill();
     fctx.save();fctx.translate(x,y+bob);fctx.scale(player.dir,1);
-    fctx.fillStyle="#2a3550"; // 外套
-    fctx.beginPath();fctx.moveTo(0,-16);fctx.quadraticCurveTo(13,-6,10,13);
-    fctx.lineTo(-10,13);fctx.quadraticCurveTo(-13,-6,0,-16);fctx.fill();
-    fctx.fillStyle="#d9a441"; // 税紋の襟巻
-    fctx.fillRect(-8,-15,16,4);
-    fctx.beginPath();fctx.moveTo(-8,-13);fctx.quadraticCurveTo(-16,-8,-14,0);
-    fctx.lineTo(-11,-2);fctx.quadraticCurveTo(-12,-8,-7,-11);fctx.fill();
-    fctx.fillStyle="#e8d7b0"; // 顔
-    fctx.beginPath();fctx.arc(1,-22,6.5,0,7);fctx.fill();
-    fctx.fillStyle="#324066"; // フード
-    fctx.beginPath();fctx.arc(0,-24,8.5,Math.PI*.75,Math.PI*2.1);fctx.fill();
+    // 赤マント(後ろになびく)
+    fctx.fillStyle="#c8402e";
+    fctx.beginPath();fctx.moveTo(-6,-13);
+    fctx.quadraticCurveTo(-15-swing,-2,-11-swing,14);
+    fctx.quadraticCurveTo(-3,12,5,13);
+    fctx.quadraticCurveTo(8,-2,7,-12);fctx.closePath();fctx.fill();
+    fctx.fillStyle="#a53324";
+    fctx.beginPath();fctx.moveTo(-8-swing,2);
+    fctx.quadraticCurveTo(-12-swing,8,-10-swing,13);
+    fctx.lineTo(-5,12);fctx.quadraticCurveTo(-8,7,-8-swing,2);fctx.closePath();fctx.fill();
+    // 背中の剣(柄が肩の上に)
+    fctx.strokeStyle="#aeb6bf";fctx.lineWidth=2.4;
+    fctx.beginPath();fctx.moveTo(7,-21);fctx.lineTo(3,-12);fctx.stroke();
+    fctx.strokeStyle="#6b4a2f";fctx.lineWidth=3;
+    fctx.beginPath();fctx.moveTo(8.5,-24);fctx.lineTo(7,-20);fctx.stroke();
+    // 青いチュニック+金の縁
+    fctx.fillStyle="#2e57a8";
+    fctx.beginPath();fctx.moveTo(-6,-12);fctx.quadraticCurveTo(-8,0,-6,8);
+    fctx.lineTo(6,8);fctx.quadraticCurveTo(8,0,6,-12);fctx.closePath();fctx.fill();
+    fctx.fillStyle="#d9a441";
+    fctx.fillRect(-6,0,12,2.4);
+    fctx.fillRect(-1.1,-11,2.2,11);
+    // 脚・ブーツ
+    fctx.fillStyle="#4a4f57";fctx.fillRect(-5,8,4,4);fctx.fillRect(1,8,4,4);
+    fctx.fillStyle="#5d4632";fctx.fillRect(-5.5,12,5,4);fctx.fillRect(.5,12,5,4);
+    // 顔
+    fctx.fillStyle="#f0d6b3";fctx.beginPath();fctx.arc(0,-17,6,0,7);fctx.fill();
+    // 茶髪(ざんばら)
+    fctx.fillStyle="#6b4a2f";
+    fctx.beginPath();fctx.arc(0,-19,6.6,Math.PI*.92,Math.PI*2.1);fctx.fill();
+    fctx.beginPath();fctx.moveTo(-6.4,-19);fctx.lineTo(-7.6,-14);fctx.lineTo(-4,-17.5);fctx.closePath();fctx.fill();
+    fctx.beginPath();fctx.moveTo(6.4,-19);fctx.lineTo(7.6,-14.5);fctx.lineTo(4,-17.5);fctx.closePath();fctx.fill();
+    fctx.beginPath();fctx.moveTo(-2,-24);fctx.lineTo(0,-27);fctx.lineTo(2,-24);fctx.closePath();fctx.fill();
+    // 目
+    fctx.fillStyle="#2a2318";
+    fctx.fillRect(-3,-17.6,1.7,2.2);fctx.fillRect(1.3,-17.6,1.7,2.2);
     fctx.restore();
   }
   fctx.restore();
