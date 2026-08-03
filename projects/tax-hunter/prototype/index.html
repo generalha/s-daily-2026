@@ -101,36 +101,53 @@
   #encounter.go{animation:iris .75s forwards}
   @keyframes iris{0%{opacity:0; transform:scale(2.6)}100%{opacity:1; transform:scale(1)}}
 
-  /* ---------- バトル ---------- */
-  #battle{padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 12px)}
-  #stage{display:flex; flex-direction:column; height:100%; gap:8px}
+  /* ---------- バトル(クラシック携帯機RPG様式) ---------- */
+  #battle{padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 10px)}
+  #stage{display:flex; flex-direction:column; height:100%; gap:7px}
   #stage.shake{animation:shake .38s}
   #stage.shake-big{animation:shakeBig .5s}
   @keyframes shake{0%,100%{transform:none}20%{transform:translate(5px,-3px)}40%{transform:translate(-6px,2px)}60%{transform:translate(4px,3px)}80%{transform:translate(-3px,-2px)}}
   @keyframes shakeBig{0%,100%{transform:none}15%{transform:translate(10px,-6px) rotate(.6deg)}35%{transform:translate(-11px,5px) rotate(-.6deg)}55%{transform:translate(8px,6px)}75%{transform:translate(-6px,-5px)}}
 
-  .topbar{display:flex; align-items:center; gap:10px}
-  .hp-block{flex:1}
-  .hp-label{display:flex; justify-content:space-between; font-size:11px; color:var(--parch-dim); margin-bottom:3px; letter-spacing:.08em}
-  .bar{height:10px; border-radius:6px; background:#0b1017; border:1px solid var(--line); overflow:hidden}
-  .bar > i{display:block; height:100%; border-radius:5px; transition:width .3s}
-  #php-bar > i{background:linear-gradient(90deg,#67b06a,#8fd08a); width:100%}
-  #combo-chip{
-    min-width:86px; text-align:center; font-family:var(--serif); font-weight:800;
-    border:1px solid var(--line); border-radius:10px; padding:6px 8px; background:rgba(26,36,50,.7);
-    font-size:13px; color:var(--parch-dim); line-height:1.3;
+  /* 戦場: 明るい草原のバンド背景に対角配置 */
+  #bstage{
+    position:relative; flex:1; min-height:230px; max-height:460px; border-radius:10px; overflow:hidden;
+    border:2px solid #2e2e44;
+    background:linear-gradient(180deg,
+      #e9edcc 0%, #dfe8c0 18%, #c9dda6 34%, #b8d18e 52%, #a3c77f 70%, #8fbf78 100%);
   }
-  #combo-chip b{display:block; font-size:19px; color:var(--gold-bright)}
-  #combo-chip.hot{border-color:var(--gold); box-shadow:0 0 14px rgba(217,164,65,.35)}
+  .platform{position:absolute; border-radius:50%; background:#6fa757;
+    box-shadow:inset 0 4px 10px rgba(0,0,0,.18), inset 0 -3px 6px rgba(255,255,255,.22)}
+  .platform.enemy-p{right:3%; top:106px; width:54%; height:38px}
+  .platform.player-p{left:-8%; bottom:10px; width:58%; height:44px}
+  .binfo{
+    position:absolute; background:#f6f1dc; border:2px solid #2e2e44; border-radius:8px;
+    box-shadow:0 2px 0 #2e2e44, inset 0 0 0 2px #c9a23f; padding:7px 10px 8px;
+    color:#2e2e44; min-width:47%;
+  }
+  .binfo.enemy-i{left:8px; top:8px}
+  .binfo.player-i{right:8px; bottom:8px}
+  .bname{display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+    font-size:13.5px; font-weight:800; letter-spacing:.06em; margin-bottom:5px}
+  .bname small{font-size:10.5px; font-weight:700; color:#7a6a35}
+  .bhp{display:flex; align-items:center; gap:5px}
+  .hptag{
+    font-size:9px; font-weight:900; letter-spacing:.06em; color:#f6f1dc; background:#b3862e;
+    border-radius:3px; padding:1.5px 4px;
+  }
+  .bar{flex:1; height:9px; border-radius:5px; background:#3d3d55; border:1px solid #2e2e44; overflow:hidden}
+  .bar > i{display:block; height:100%; border-radius:4px; transition:width .3s;
+    background:linear-gradient(180deg,#7fd455,#4faf3c); width:100%}
+  .bhp .num{font-size:11px; font-weight:800; min-width:24px; text-align:right}
+  #combo-chip{font-size:10.5px; font-weight:800; color:#8a6420; margin-top:4px; letter-spacing:.05em}
+  #combo-chip b{color:#b3862e}
+  #combo-chip.hot{color:#b3402e}
+  #combo-chip.hot b{color:#b3402e}
 
-  /* 敵ゾーン */
-  #enemy-zone{position:relative; flex:1; min-height:150px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end}
-  .enemy-name{font-family:var(--serif); font-size:15px; letter-spacing:.14em; color:var(--parch)}
-  .enemy-name small{color:var(--slime); font-size:11px; margin-left:6px}
-  #ehp-wrap{width:min(72%,260px); margin:6px 0 4px}
-  #ehp-bar > i{background:linear-gradient(90deg,var(--slime-deep),var(--slime)); width:100%}
+  /* 敵・自機の配置 */
+  #enemy-zone{position:absolute; inset:0; pointer-events:none} /* ダメージ数字レイヤ */
   #enemy{
-    position:relative; width:132px; height:104px; margin-bottom:2px;
+    position:absolute; right:10%; top:32px; width:118px; height:92px;
     animation:bob 2.6s ease-in-out infinite;
   }
   @keyframes bob{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-7px) scaleY(1.04)}}
@@ -157,58 +174,86 @@
   }
   .kanpa-ring.go{animation:ring .55s ease-out forwards}
   @keyframes ring{0%{opacity:1; width:20px; height:20px}100%{opacity:0; width:190px; height:190px}}
+  /* 自機(ハンター後ろ姿) */
+  #hunter{position:absolute; left:12%; bottom:28px; width:86px; height:96px}
+  #hunter .cloak{
+    position:absolute; left:50%; bottom:0; width:64px; height:62px; transform:translateX(-50%);
+    background:linear-gradient(180deg,#3a4a76,#2a3550);
+    border-radius:46% 46% 30% 30% / 70% 70% 22% 22%;
+    box-shadow:inset -8px -6px 0 rgba(0,0,0,.18);
+  }
+  #hunter .scarf{
+    position:absolute; left:50%; bottom:52px; width:52px; height:12px; transform:translateX(-50%);
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold)); border-radius:6px;
+  }
+  #hunter .scarf::after{
+    content:""; position:absolute; right:-12px; top:2px; width:22px; height:8px;
+    background:var(--gold); border-radius:4px; transform:rotate(14deg);
+  }
+  #hunter .hood{
+    position:absolute; left:50%; bottom:56px; width:42px; height:40px; transform:translateX(-50%);
+    background:linear-gradient(180deg,#43548a,#324066);
+    border-radius:50% 50% 42% 42%;
+    box-shadow:inset -6px -4px 0 rgba(0,0,0,.2);
+  }
+  #hunter .hood::after{ /* フードの先 */
+    content:""; position:absolute; top:-8px; left:50%; width:12px; height:14px; transform:translateX(-50%) rotate(6deg);
+    background:#43548a; border-radius:50% 50% 20% 20%;
+  }
+
   .dmg{
-    position:absolute; font-family:var(--serif); font-weight:800; font-size:26px; color:var(--parch);
-    text-shadow:0 2px 6px rgba(0,0,0,.6); pointer-events:none; animation:dmgFloat .8s forwards;
+    position:absolute; font-family:var(--serif); font-weight:800; font-size:26px; color:#fffce8;
+    -webkit-text-stroke:1.2px #2e2e44; text-shadow:0 2px 0 #2e2e44; pointer-events:none;
+    animation:dmgFloat .8s forwards;
   }
   .dmg.crit{color:var(--gold-bright); font-size:34px}
-  .dmg.hurt{color:var(--danger-bright)}
+  .dmg.hurt{color:#ff8a72}
   @keyframes dmgFloat{0%{opacity:0; transform:translateY(8px) scale(.6)}20%{opacity:1; transform:translateY(0) scale(1.1)}100%{opacity:0; transform:translateY(-46px) scale(1)}}
 
-  /* 問いカード */
+  /* メッセージ窓(クラシック様式) */
   #qcard{
-    position:relative; border:1px solid var(--line); border-radius:14px;
-    background:linear-gradient(180deg, rgba(35,47,66,.92), rgba(26,36,50,.92));
-    padding:14px 16px 12px; min-height:104px;
+    position:relative; margin-top:auto; border-radius:10px; padding:11px 14px 9px; min-height:96px;
+    background:#16323e; border:3px solid #f2e8c8;
+    box-shadow:0 0 0 2px #2e2e44, inset 0 0 0 1px #2e2e44;
   }
-  #qcard::before{
-    content:""; position:absolute; top:-9px; left:50%; width:16px; height:16px; transform:translateX(-50%) rotate(45deg);
-    background:#232f42; border-left:1px solid var(--line); border-top:1px solid var(--line);
-  }
-  #qcard.finisher{border-color:var(--gold); box-shadow:0 0 22px rgba(217,164,65,.3)}
-  .q-eyebrow{font-size:11px; letter-spacing:.28em; color:var(--slime); margin-bottom:6px}
+  #qcard.finisher{border-color:var(--gold-bright); box-shadow:0 0 0 2px #8a6420, 0 0 20px rgba(217,164,65,.45), inset 0 0 0 1px #2e2e44}
+  .q-eyebrow{font-size:11px; font-weight:800; letter-spacing:.18em; color:#8fd0f5; margin-bottom:5px}
   #qcard.finisher .q-eyebrow{color:var(--gold-bright)}
-  #qtext{font-size:16px; line-height:1.65; font-weight:700; min-height:52px; text-wrap:balance}
-  #timer{height:5px; border-radius:3px; background:#0b1017; margin-top:10px; overflow:hidden}
+  #qtext{font-size:15.5px; line-height:1.62; font-weight:700; min-height:50px; color:#f4f6e8}
+  #timer{height:5px; border-radius:3px; background:#0b1a21; margin-top:8px; overflow:hidden}
   #timer > i{display:block; height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-bright)); width:100%}
   #timer.rush > i{background:var(--danger-bright)}
 
   /* 回答・攻撃 */
-  #answers{display:grid; grid-template-columns:1fr 1fr; gap:9px; transition:opacity .45s}
+  /* 回答 = コマンド窓(2×2) */
+  #answers{display:grid; grid-template-columns:1fr 1fr; gap:7px; transition:opacity .45s}
   #answers.arming{opacity:.45; pointer-events:none}
   .ans{
-    font-family:var(--sans); font-size:14.5px; font-weight:700; line-height:1.4; color:var(--parch);
-    background:rgba(26,36,50,.9); border:1px solid var(--line); border-radius:12px;
-    padding:14px 10px; min-height:62px; cursor:pointer;
+    font-family:var(--sans); font-size:14px; font-weight:800; line-height:1.4; color:#2e2e44;
+    background:#f6f1dc; border:2px solid #2e2e44; border-radius:8px;
+    box-shadow:0 2px 0 #2e2e44, inset 0 0 0 2px #e3d9b8;
+    padding:13px 8px; min-height:60px; cursor:pointer; position:relative;
   }
-  .ans:active{background:var(--night3)}
-  .ans.right{background:linear-gradient(180deg,var(--gold-bright),var(--gold)); color:var(--night); border-color:var(--gold-bright)}
-  .ans.wrong-pick{background:linear-gradient(180deg,var(--danger-bright),var(--danger)); border-color:var(--danger-bright)}
-  .ans.dim{opacity:.35}
+  .ans::before{content:"▶"; font-size:9px; color:#b3862e; margin-right:5px; vertical-align:1px}
+  .ans:active{transform:translateY(2px); box-shadow:0 0 0 #2e2e44, inset 0 0 0 2px #e3d9b8}
+  .ans.right{background:linear-gradient(180deg,var(--gold-bright),var(--gold)); border-color:#8a6420; box-shadow:0 2px 0 #8a6420, inset 0 0 0 2px #f7e3ae}
+  .ans.wrong-pick{background:linear-gradient(180deg,var(--danger-bright),var(--danger)); color:#fff; border-color:#7c2a1c; box-shadow:0 2px 0 #7c2a1c, inset 0 0 0 2px #eda294}
+  .ans.dim{opacity:.4}
   #attack-zone{
-    display:none; position:relative; border-radius:14px; text-align:center; padding:26px 10px;
-    background:radial-gradient(circle at 50% 40%, rgba(217,164,65,.28), rgba(26,36,50,.9) 70%);
-    border:1.5px solid var(--gold); cursor:pointer; overflow:hidden;
+    display:none; position:relative; border-radius:8px; text-align:center; padding:24px 10px;
+    background:#f6f1dc; border:2px solid #2e2e44;
+    box-shadow:0 2px 0 #2e2e44, inset 0 0 0 2px #c9a23f;
+    cursor:pointer; overflow:hidden;
   }
-  #attack-zone .big{font-family:var(--serif); font-size:30px; font-weight:800; color:var(--gold-bright); letter-spacing:.2em}
-  #attack-zone .sub{font-size:12px; color:var(--parch-dim); margin-top:4px}
-  #attack-zone .crit-note{color:var(--gold-bright); font-weight:700}
+  #attack-zone .big{font-family:var(--serif); font-size:29px; font-weight:800; color:#b3402e; letter-spacing:.18em}
+  #attack-zone .sub{font-size:12px; color:#7a6a35; margin-top:4px; font-weight:700}
+  #attack-zone .crit-note{color:#b3862e; font-weight:800}
   .tapfx{position:absolute; width:14px; height:14px; border-radius:50%; background:var(--gold-bright); opacity:.85; pointer-events:none; animation:tapfx .45s forwards}
   @keyframes tapfx{100%{transform:scale(4); opacity:0}}
 
   /* トースト(レシーの一言) */
   #toast{
-    position:absolute; left:14px; right:14px; bottom:calc(env(safe-area-inset-bottom) + 118px);
+    position:absolute; left:14px; right:14px; bottom:calc(env(safe-area-inset-bottom) + 268px);
     background:var(--parch); color:#2a2318; border-radius:10px; padding:10px 13px;
     font-size:12.5px; line-height:1.6; box-shadow:0 8px 24px rgba(0,0,0,.5);
     opacity:0; transform:translateY(8px); transition:.3s; pointer-events:none; z-index:40;
@@ -238,7 +283,8 @@
   #flash.red{background:var(--danger)}
 
   /* ---------- リザルト ---------- */
-  #result{justify-content:center; padding:28px 22px; gap:0; text-align:center; overflow-y:auto}
+  #result{justify-content:center; padding:28px 22px; gap:0; text-align:center; overflow-y:auto;
+    background:radial-gradient(120% 55% at 50% -10%, #24384f 0%, transparent 60%), var(--night)}
   .result-head{font-family:var(--serif); font-size:34px; font-weight:800; letter-spacing:.18em; color:var(--gold-bright); text-shadow:0 0 26px rgba(217,164,65,.4)}
   .result-head.lose{color:var(--parch-dim); text-shadow:none}
   .result-sub{font-size:13px; color:var(--parch-dim); margin-top:8px; line-height:1.8}
@@ -321,21 +367,25 @@
   <!-- バトル -->
   <div class="screen hidden" id="battle">
     <div id="stage">
-      <div class="topbar">
-        <div class="hp-block">
-          <div class="hp-label"><span>ハンター</span><span class="num" id="php-num">100</span></div>
-          <div class="bar" id="php-bar"><i></i></div>
-        </div>
-        <div id="combo-chip">連続看破<b class="num" id="combo-num">0</b></div>
-      </div>
-      <div id="enemy-zone">
+      <div id="bstage">
+        <div class="platform enemy-p"></div>
+        <div class="platform player-p"></div>
         <div id="enemy">
           <div class="body"></div><div class="shine"></div>
           <div class="eye l"></div><div class="eye r"></div><div class="mouth"></div>
           <div class="kanpa-ring" id="ring"></div>
         </div>
-        <div class="enemy-name">青色スライム・アオイロン<small>ランクG</small></div>
-        <div id="ehp-wrap"><div class="bar" id="ehp-bar"><i></i></div></div>
+        <div id="hunter"><div class="cloak"></div><div class="scarf"></div><div class="hood"></div></div>
+        <div class="binfo enemy-i">
+          <div class="bname">アオイロン<small>ランク:G</small></div>
+          <div class="bhp"><span class="hptag">HP</span><div class="bar" id="ehp-bar"><i></i></div></div>
+        </div>
+        <div class="binfo player-i">
+          <div class="bname">ハンター<small>Lv:1</small></div>
+          <div class="bhp"><span class="hptag">HP</span><div class="bar" id="php-bar"><i></i></div><span class="num" id="php-num">100</span></div>
+          <div id="combo-chip">連続看破 <b class="num" id="combo-num">0</b></div>
+        </div>
+        <div id="enemy-zone"></div>
       </div>
       <div id="qcard">
         <div class="q-eyebrow" id="q-eyebrow">敵の問い</div>
@@ -513,9 +563,13 @@ function updateBars(){
   $("combo-chip").classList.toggle("hot",streak>=3)}
 function dmgNum(target,val,cls){const zone=$("enemy-zone"),d=document.createElement("div");
   d.className="dmg "+(cls||"");d.textContent=val;
-  d.style.left=(target==="enemy"?rand(30,60):rand(15,35))+"%";
-  d.style.top=(target==="enemy"?rand(18,45):60)+"%";
+  d.style.left=(target==="enemy"?rand(55,78):rand(12,30))+"%";
+  d.style.top=(target==="enemy"?rand(10,32):rand(48,58))+"%";
   zone.appendChild(d);later(()=>d.remove(),850)}
+let typeItv=null;
+function typeText(el,txt){clearInterval(typeItv);el.textContent="";let i=0;
+  typeItv=setInterval(()=>{i++;el.textContent=txt.slice(0,i);
+    if(i>=txt.length)clearInterval(typeItv)},16)}
 
 /* ================= バトル進行 ================= */
 function startBattle(){
@@ -535,8 +589,8 @@ function nextQuestion(){
   currentQ=isFinisher?FINISHER:pickQuestion();
   if(!isFinisher)totalAsked++;
   const card=$("qcard");card.classList.toggle("finisher",isFinisher);
-  $("q-eyebrow").textContent=isFinisher?"トドメの一問 — 核心を撃て":"敵の問い";
-  $("qtext").textContent=currentQ.q;
+  $("q-eyebrow").textContent=isFinisher?"▼ トドメの一問!":"▼ アオイロンの 問い!";
+  typeText($("qtext"),currentQ.q);
   sfx.charge();
   // 選択肢(表示直後0.6秒は構え時間 — 連打の誤タップを受け付けない)
   armed=false;
