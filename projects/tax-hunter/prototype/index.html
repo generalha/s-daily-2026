@@ -168,6 +168,29 @@
   @keyframes lunge{0%{transform:translateY(0)}35%{transform:translateY(-16px) scale(1.06)}65%{transform:translateY(26px) scale(1.1)}100%{transform:translateY(0)}}
   #enemy.dead{animation:melt 1.1s forwards}
   @keyframes melt{60%{transform:scaleY(.5) translateY(26px); opacity:.9}100%{transform:scaleY(.06) translateY(52px); opacity:0}}
+  /* 捕獲の書 */
+  #book{position:absolute; right:17%; top:66px; width:38px; height:30px; display:none; z-index:6}
+  #book .bcover{position:absolute; inset:0; background:linear-gradient(180deg,#3a4a76,#26304b);
+    border:2px solid #c9a23f; border-radius:4px 7px 7px 4px; box-shadow:0 3px 6px rgba(0,0,0,.35)}
+  #book .bspine{position:absolute; left:5px; top:2px; bottom:2px; width:3px; background:#c9a23f; border-radius:2px}
+  #book .bgem{position:absolute; left:55%; top:50%; width:11px; height:11px;
+    transform:translate(-50%,-50%) rotate(45deg); background:#f0c869; box-shadow:0 0 10px #f0c869}
+  #book.throw{display:block; animation:bookThrow .65s cubic-bezier(.35,-.3,.55,1) forwards}
+  @keyframes bookThrow{0%{transform:translate(var(--bx),var(--by)) rotate(0) scale(.8)}
+    100%{transform:translate(0,0) rotate(720deg) scale(1)}}
+  #book.wob{display:block; animation:bookWob 1.1s ease-in-out infinite}
+  @keyframes bookWob{0%,100%{transform:rotate(0)}25%{transform:rotate(-13deg) translateY(2px)}
+    75%{transform:rotate(13deg) translateY(2px)}}
+  #book.caught{display:block; animation:bookCaught .9s forwards}
+  @keyframes bookCaught{0%{transform:scale(1)}30%{transform:scale(1.4)}60%{transform:scale(.92)}
+    100%{transform:scale(1.12)}}
+  #enemy.sucked{animation:suck .55s forwards}
+  @keyframes suck{55%{transform:translate(8px,22px) scale(.4) rotate(28deg); opacity:.9}
+    100%{transform:translate(12px,34px) scale(0) rotate(90deg); opacity:0}}
+  #enemy.escape{animation:escapeJump 1.15s forwards}
+  @keyframes escapeJump{0%{transform:scale(0); opacity:0}25%{transform:scale(1.12); opacity:1}
+    45%{transform:scale(.98)}100%{transform:translateX(150px) scale(.55); opacity:0}}
+
   .kanpa-ring{
     position:absolute; left:50%; top:50%; width:20px; height:20px; border:3px solid var(--gold-bright);
     border-radius:50%; transform:translate(-50%,-50%); opacity:0; pointer-events:none;
@@ -359,6 +382,7 @@
     <div class="field-hud">
       <div class="chip">緑晶の草原</div>
       <div class="chip gold num" id="chip-pick">徴憑 0</div>
+      <div class="chip gold num" id="chip-party" style="display:none">仲間 0</div>
       <button class="chip" id="btn-field-codex">大税典</button>
     </div>
     <div class="field-hint" id="field-hint">画面をドラッグして移動 — 光は徴憑、魔物に近づくと戦闘!</div>
@@ -376,6 +400,7 @@
           <div class="kanpa-ring" id="ring"></div>
         </div>
         <div id="hunter"><div class="cloak"></div><div class="scarf"></div><div class="hood"></div></div>
+        <div id="book"><div class="bcover"></div><div class="bspine"></div><div class="bgem"></div></div>
         <div class="binfo enemy-i">
           <div class="bname">アオイロン<small>ランク:G</small></div>
           <div class="bhp"><span class="hptag">HP</span><div class="bar" id="ehp-bar"><i></i></div></div>
@@ -498,7 +523,14 @@ const FINISHER = {tag:"青色申告特別控除",
 const E_MAX=900, P_MAX=100, ATTACK_MS=2800, TAP_CD=110;
 let eHP,pHP,streak,maxStreak,askedIdx,correctCount,totalAsked,battleStart,
     currentQ,isFinisher,finisherDone,qStartTime,critMode,timerId,rushId,codexReturn="title",timers=[],
-    armed=false,currentEnemyIdx=-1;
+    armed=false,currentEnemyIdx=-1,
+    captureMode=false,captureHits=0,captured=false,captureEscaped=false;
+
+/* 仲間(捕獲済みモンスター) */
+const PARTY_KEY="taxhunter_party_v1";
+function partyLoad(){try{return JSON.parse(localStorage.getItem(PARTY_KEY))||[]}catch(e){return[]}}
+function partySave(){try{localStorage.setItem(PARTY_KEY,JSON.stringify(party))}catch(e){}}
+let party=partyLoad();
 let audioCtx=null;
 
 const $=id=>document.getElementById(id);
@@ -576,7 +608,9 @@ function startBattle(){
   clearTimers();
   eHP=E_MAX;pHP=P_MAX;streak=0;maxStreak=0;askedIdx=[];correctCount=0;totalAsked=0;
   isFinisher=false;finisherDone=false;battleStart=Date.now();
-  $("enemy").className="";updateBars();show("battle");
+  captureMode=false;captureHits=0;captured=false;captureEscaped=false;
+  $("enemy").className="";$("book").className="";$("book").style.display="";
+  updateBars();show("battle");
   later(nextQuestion,500);
 }
 function pickQuestion(){
@@ -589,7 +623,8 @@ function nextQuestion(){
   currentQ=isFinisher?FINISHER:pickQuestion();
   if(!isFinisher)totalAsked++;
   const card=$("qcard");card.classList.toggle("finisher",isFinisher);
-  $("q-eyebrow").textContent=isFinisher?"▼ トドメの一問!":"▼ アオイロンの 問い!";
+  $("q-eyebrow").textContent=isFinisher?"▼ トドメの一問!"
+    :captureMode?("▼ 本の中から 問い! ("+(captureHits+1)+"/2)"):"▼ アオイロンの 問い!";
   typeText($("qtext"),currentQ.q);
   sfx.charge();
   // 選択肢(表示直後0.6秒は構え時間 — 連打の誤タップを受け付けない)
@@ -601,7 +636,7 @@ function nextQuestion(){
     b.addEventListener("pointerdown",()=>answer(i,b),{passive:true});
     box.appendChild(b)});
   // タイマー(構えが解けてから走り出す)
-  const limit=isFinisher?15000:(totalAsked<=5?12000:9000);
+  const limit=(isFinisher||captureMode)?15000:(totalAsked<=5?12000:9000);
   const bar=$("timer");bar.classList.remove("rush");
   const inner=bar.firstElementChild;
   inner.style.transition="none";inner.style.width="100%";
@@ -633,6 +668,7 @@ function answer(i,btn){
   ok?onCorrect():onWrong(i===-1);
 }
 function onCorrect(){
+  if(captureMode){captureStep();return}
   const speed=Date.now()-qStartTime;
   critMode=speed<=3500;
   streak++;maxStreak=Math.max(maxStreak,streak);
@@ -680,10 +716,71 @@ function startFinisher(){
 function finisherHit(){
   eHP=0;updateBars();
   flash("gold");shake(true);sfx.fanfare();vibrate([60,40,120]);
-  $("enemy").className="dead";
-  later(()=>victory(true),1300);
+  later(offerCapture,900);
+}
+
+/* ---- 捕獲の書 ---- */
+function offerCapture(){
+  isFinisher=false; // 以降の出題は通常プールから
+  $("enemy").classList.add("stunned");
+  $("qcard").classList.remove("finisher");
+  $("q-eyebrow").textContent="▼ アオイロンは 弱りきっている!";
+  typeText($("qtext"),"大税典の空白の頁が 疼いている——本を投げて 仲間にするか?");
+  const box=$("answers");box.innerHTML="";box.style.display="grid";box.classList.remove("arming");
+  $("attack-zone").style.display="none";
+  const inner=$("timer").firstElementChild;inner.style.transition="none";inner.style.width="0%";
+  const b1=document.createElement("button");b1.className="ans";b1.textContent="本を投げる";
+  b1.addEventListener("pointerdown",throwBook,{passive:true});
+  const b2=document.createElement("button");b2.className="ans";b2.textContent="とどめを刺す";
+  b2.addEventListener("pointerdown",()=>{lockChoice();
+    $("enemy").className="dead";sfx.hit();later(()=>victory(true),1200)},{passive:true});
+  box.appendChild(b1);box.appendChild(b2);
+}
+function lockChoice(){[...document.querySelectorAll(".ans")].forEach(b=>b.style.pointerEvents="none")}
+function throwBook(){
+  lockChoice();
+  const book=$("book");
+  book.style.display="block";
+  const br=book.getBoundingClientRect(),hr=$("hunter").getBoundingClientRect();
+  book.style.setProperty("--bx",(hr.left-br.left)+"px");
+  book.style.setProperty("--by",(hr.top-br.top)+"px");
+  book.className="throw";sfx.charge();
+  later(()=>{ // 命中 → 吸い込み
+    sfx.hit();vibrate(40);shake(false);
+    $("enemy").classList.remove("stunned");$("enemy").classList.add("sucked");
+    later(()=>{book.className="wob";
+      toast("<b>本がモンスターを 呑み込んだ!</b> 問いに二つ正解すれば 絆が結ばれる。",2600);
+      captureMode=true;captureHits=0;
+      later(nextQuestion,1000);
+    },650);
+  },650);
+}
+function captureStep(){
+  captureHits++;codexMark(currentQ.tag,"known");
+  if(!isFinisher)correctCount++;
+  sfx.correct();vibrate(35);flash("gold");
+  if(captureHits>=2){
+    toast("<b>本が金色に輝いた!</b> "+currentQ.exp,2400);
+    later(()=>{captured=true;party.push("aoiron");partySave();
+      $("book").className="caught";sfx.fanfare();vibrate([60,40,120]);
+      cutin("仲間になった!!");
+      later(()=>victory(true),1600)},700);
+  }else{
+    toast("<b>本が震えた! あと一問。</b> "+currentQ.exp,2400);
+    later(nextQuestion,1500);
+  }
+}
+function captureFail(isTimeout){
+  codexMark(currentQ.tag,"hint");
+  sfx.wrong();vibrate([70,50,70]);flash("red");
+  captureEscaped=true;captureMode=false;
+  $("book").className="";$("book").style.display="";
+  const en=$("enemy");en.classList.remove("sucked");en.classList.add("escape");
+  toast((isTimeout?"<b>時間切れ…</b> ":"")+"<b>本が弾け飛んだ!</b> アオイロンは逃げてしまった…。正解は「"+currentQ.c[currentQ.a]+"」。",3200);
+  later(()=>victory(true),1800);
 }
 function onWrong(isTimeout){
+  if(captureMode){captureFail(isTimeout);return}
   streak=0;critMode=false;
   codexMark(currentQ.tag,"hint");
   sfx.wrong();vibrate([70,50,70]);
@@ -717,10 +814,17 @@ function victory(finisherBonus){
   const sec=Math.round((Date.now()-battleStart)/1000);
   const rate=totalAsked?Math.round(correctCount/totalAsked*100):0;
   const {drops,boost}=rollDrops(finisherBonus);
+  if(captured)drops.unshift({name:"アオイロンが 仲間になった!",tier:"PARTY — 草原で後ろをついてくる",cls:"epic"});
   const inner=$("result-inner");
+  const head=captured?"捕獲成功":"討伐完了";
+  const sub=captured
+    ?"アオイロンは大税典の頁に宿った。<br>これからは君と共に草原を歩む——"
+    :captureEscaped
+    ?"アオイロンには逃げられた…。<br>だが知識の欠片は確かに手に入れた。"
+    :"青色スライム・アオイロンを狩った。<br>大税典の頁が復元されていく——";
   inner.innerHTML=
-    '<div class="result-head">討伐完了</div>'+
-    '<div class="result-sub">青色スライム・アオイロンを狩った。<br>大税典の頁が復元されていく——</div>'+
+    '<div class="result-head">'+head+'</div>'+
+    '<div class="result-sub">'+sub+'</div>'+
     '<div class="stats">'+
       '<div class="stat-row"><span>討伐タイム</span><b class="num">'+Math.floor(sec/60)+"分"+(sec%60)+"秒</b></div>"+
       '<div class="stat-row"><span>看破率</span><b class="num">'+rate+"%("+correctCount+"/"+totalAsked+")</b></div>"+
@@ -758,6 +862,8 @@ const fcv=$("fcanvas"),fctx=fcv.getContext("2d");
 let fieldRun=false,fLast=0,VW=0,VH=0,hintShown=false;
 const player={x:900,y:820,dir:1,moving:false,step:0};
 const joy={on:false,sx:0,sy:0,dx:0,dy:0};
+/* 仲間の隊列: 一定距離ごとに足跡を記録し、後続がなぞる */
+const trail=[];let lastSample={x:player.x,y:player.y};
 const enemies=[
   {x:600,y:520,seed:1,alive:true,cool:0,ox:0,oy:0},
   {x:1320,y:700,seed:2,alive:true,cool:0,ox:0,oy:0},
@@ -791,6 +897,8 @@ window.addEventListener("pointercancel",()=>{joy.on=false;joy.dx=0;joy.dy=0});
 function enterField(){
   ac();show("field");resizeField();
   $("chip-pick").textContent="徴憑 "+pickCount;
+  const pc=$("chip-party");
+  if(party.length){pc.style.display="";pc.textContent="仲間 "+party.length}else pc.style.display="none";
   if(!hintShown){hintShown=true;later(()=>$("field-hint").style.opacity="0",7000)}
   if(enemies.every(e=>!e.alive))
     later(()=>{if(!fieldRun)return;
@@ -829,6 +937,10 @@ function fieldLoop(now){
     if(Math.abs(nx)>.2)player.dir=nx<0?-1:1;
     player.moving=true;player.step+=dt*10*cap;
   }else player.moving=false;
+  if(Math.hypot(player.x-lastSample.x,player.y-lastSample.y)>5){
+    trail.push({x:player.x,y:player.y});lastSample={x:player.x,y:player.y};
+    if(trail.length>240)trail.shift();
+  }
   enemies.forEach((en,i)=>{
     if(!en.alive)return;
     if(en.cool>0)en.cool-=dt;
@@ -848,6 +960,24 @@ function fieldLoop(now){
 }
 
 function inView(x,y,camX,camY,m){return x>camX-m&&x<camX+VW+m&&y>camY-m&&y<camY+VH+m}
+function drawSlimeAt(ex,ey,t,seed,scale){
+  fctx.save();fctx.translate(ex,ey);fctx.scale(scale,scale);
+  fctx.fillStyle="rgba(0,0,0,.3)";
+  fctx.beginPath();fctx.ellipse(0,16,22,7,0,0,7);fctx.fill();
+  const sq=1+Math.sin(t*2.2+seed)*0.07;
+  fctx.scale(1,sq);
+  const g=fctx.createRadialGradient(-8,-14,4,0,0,30);
+  g.addColorStop(0,"#8fd0f5");g.addColorStop(.5,"#4aa3d9");g.addColorStop(1,"#255e85");
+  fctx.fillStyle=g;
+  fctx.beginPath();fctx.moveTo(-24,8);
+  fctx.quadraticCurveTo(-27,-20,0,-22);fctx.quadraticCurveTo(27,-20,24,8);
+  fctx.quadraticCurveTo(0,17,-24,8);fctx.fill();
+  fctx.fillStyle="rgba(255,255,255,.7)";
+  fctx.beginPath();fctx.ellipse(-9,-12,6,3.4,-.4,0,7);fctx.fill();
+  fctx.fillStyle="#122531";
+  fctx.beginPath();fctx.ellipse(-7,-4,2.6,3.6,0,0,7);fctx.ellipse(7,-4,2.6,3.6,0,0,7);fctx.fill();
+  fctx.restore();
+}
 function drawField(t){
   const camX=Math.max(0,Math.min(F.W-VW,player.x-VW/2));
   const camY=Math.max(0,Math.min(F.H-VH,player.y-VH/2));
@@ -904,27 +1034,21 @@ function drawField(t){
     if(!en.alive)return;
     const ex=en.x+en.ox,ey=en.y+en.oy;
     if(!inView(ex,ey,camX,camY,60))return;
-    fctx.fillStyle="rgba(0,0,0,.3)";
-    fctx.beginPath();fctx.ellipse(ex,ey+16,22,7,0,0,7);fctx.fill();
-    const sq=1+Math.sin(t*2.2+en.seed)*0.07;
-    fctx.save();fctx.translate(ex,ey);fctx.scale(1,sq);
-    const g=fctx.createRadialGradient(-8,-14,4,0,0,30);
-    g.addColorStop(0,"#8fd0f5");g.addColorStop(.5,"#4aa3d9");g.addColorStop(1,"#255e85");
-    fctx.fillStyle=g;
-    fctx.beginPath();fctx.moveTo(-24,8);
-    fctx.quadraticCurveTo(-27,-20,0,-22);fctx.quadraticCurveTo(27,-20,24,8);
-    fctx.quadraticCurveTo(0,17,-24,8);fctx.fill();
-    fctx.fillStyle="rgba(255,255,255,.7)";
-    fctx.beginPath();fctx.ellipse(-9,-12,6,3.4,-.4,0,7);fctx.fill();
-    fctx.fillStyle="#122531";
-    fctx.beginPath();fctx.ellipse(-7,-4,2.6,3.6,0,0,7);fctx.ellipse(7,-4,2.6,3.6,0,0,7);fctx.fill();
-    fctx.restore();
+    drawSlimeAt(ex,ey,t,en.seed,1);
     // 接近警告「!」
     if(en.cool<=0&&Math.hypot(player.x-ex,player.y-ey)<120){
       fctx.fillStyle="#f0c869";fctx.font="bold 22px serif";fctx.textAlign="center";
       fctx.fillText("!",ex,ey-34-Math.abs(Math.sin(t*6))*5);
     }
   });
+  // 仲間の隊列(最大3体表示)
+  const nF=Math.min(party.length,3);
+  for(let i=0;i<nF;i++){
+    const idx=trail.length-1-(i+1)*7;
+    const p=idx>=0?trail[idx]
+      :(trail[0]||{x:player.x-28*(i+1)*player.dir,y:player.y+6});
+    drawSlimeAt(p.x,p.y,t+i*.8,i*3+1,.62);
+  }
   // ハンター(主人公)
   {
     const x=player.x,y=player.y;
