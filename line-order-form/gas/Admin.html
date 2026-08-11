@@ -269,8 +269,8 @@
 
     <div class="ship-section-title">✈️ 発送待ち(送料入金確認済)</div>
     <p style="font-size:.75em;color:var(--muted);margin-bottom:8px;">
-      お届け先を確認し、EZPost(中華郵政)で伝票を作成したら追跡番号を入力して「発送済にする」。
-      「EZPost入力データをコピー」はClaude Cowork等での自動入力に使えます。
+      お届け先を確認し、日本郵便の国際郵便マイページで発送ラベルを作成したら追跡番号を入力して「発送済にする」。
+      「発送ラベル入力データをコピー」はClaude Cowork等での自動入力に使えます。
     </p>
     <div id="shipWaitList"></div>
 
@@ -560,12 +560,12 @@
               '<textarea id="ra-' + id + '" rows="2" maxlength="200">' + escapeHtml(o.recvAddress) + '</textarea>' +
               '<label>お届け先電話番号</label>' +
               '<input type="text" id="rp-' + id + '" value="' + escapeHtml(o.recvPhone) + '" maxlength="30">' +
-              '<label>追跡番号(EZPostで伝票作成後に入力)</label>' +
-              '<input type="text" id="tn-' + id + '" value="' + escapeHtml(o.trackingNo) + '" maxlength="40" placeholder="例: EE123456789TW">' +
+              '<label>追跡番号(国際郵便マイページでラベル作成後に入力)</label>' +
+              '<input type="text" id="tn-' + id + '" value="' + escapeHtml(o.trackingNo) + '" maxlength="40" placeholder="例: EM123456789JP">' +
             '</div>' +
             '<div class="ship-btns">' +
               '<button type="button" onclick="saveShip(\'' + id + '\', false, this)">💾 お届け先を保存</button>' +
-              '<button type="button" class="copy" onclick="copyEzpost(\'' + id + '\', this)">📋 EZPost入力データをコピー</button>' +
+              '<button type="button" class="copy" onclick="copyLabelData(\'' + id + '\', this)">📋 発送ラベル入力データをコピー</button>' +
               '<button type="button" class="primary" onclick="saveShip(\'' + id + '\', true, this)">✈️ 発送済にする</button>' +
             '</div></div>';
         }).join('');
@@ -664,12 +664,12 @@
       .replace(/\n\n+/g, '\n\n'), btn, '送料案内をコピーしました。LINEに貼り付けて送ってください');
   }
 
-  function copyEzpost(orderId, btn) {
+  function copyLabelData(orderId, btn) {
     var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
     if (!o) return;
     var contents = o.items.map(function (it) { return it.name + ' x' + it.qty; }).join(', ');
     var lines = [
-      '【EZPost入力データ】',
+      '【発送ラベル入力データ】',
       '注文番号: ' + o.orderId,
       '配送方法: ' + (o.shipMethod || ''),
       '重量(g): ' + (o.weightG || ''),
@@ -679,7 +679,7 @@
       '内容品: ' + contents,
       '申告価格(元): ' + (o.total || 0)
     ];
-    copyText(lines.join('\n'), btn, 'EZPost入力データをコピーしました');
+    copyText(lines.join('\n'), btn, '発送ラベル入力データをコピーしました');
   }
 
   function copyShippedMsg(orderId, btn) {
@@ -695,8 +695,8 @@
       (o.trackingNo ? '追跡番号: ' + o.trackingNo : ''),
       '',
       '▼配送状況の確認',
-      '中華郵政: https://postserv.post.gov.tw/pstmail/main_mail.html',
       '日本郵便: https://trackings.post.japanpost.jp/services/srv/search/',
+      '中華郵政(台湾側): https://postserv.post.gov.tw/pstmail/main_mail.html',
       '',
       'お届けまで今しばらくお待ちください。'
     ];
