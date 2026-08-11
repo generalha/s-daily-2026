@@ -60,6 +60,8 @@
   .st-未対応 { background: #fdecea; border-color: #f5c6c0; }
   .st-入金確認済 { background: #fff8e1; border-color: #f2dd9a; }
   .st-梱包済 { background: #e3f2fd; border-color: #a9d3f5; }
+  .st-送料入金確認済 { background: #ede7f6; border-color: #c5b3e6; }
+  .st-発送済 { background: #e0f2f1; border-color: #9fd6d2; }
   .st-受渡済 { background: #e8f5e9; border-color: #b2dfb5; }
   .st-キャンセル { background: #eee; color: #999; }
 
@@ -90,6 +92,51 @@
     border: none; border-radius: 8px; background: var(--green); color: #fff; cursor: pointer;
   }
   .pack-done-btn:disabled { background: #ccc; }
+
+  /* 計量・送料計算 */
+  .weigh-box {
+    margin-top: 10px; padding: 10px; background: #f4f8f6;
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  .weigh-box .w-row { display: flex; gap: 8px; align-items: center; }
+  .weigh-box input.w-weight {
+    width: 110px; padding: 10px; font-size: 16px; text-align: right;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  .weigh-box select.w-method {
+    flex: 1; padding: 10px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  }
+  .w-fee { margin-top: 8px; font-size: .95em; font-weight: 700; color: var(--accent); text-align: right; }
+  .w-fee small { color: var(--muted); font-weight: 400; }
+
+  /* 発送タブ */
+  .ship-section-title {
+    font-size: .85em; font-weight: 700; margin: 16px 0 8px;
+    padding-left: 8px; border-left: 4px solid var(--green);
+  }
+  .ship-card {
+    background: var(--card); border-radius: 12px; padding: 14px;
+    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .ship-card.wait-fee { border-left: 5px solid #f2b90a; }
+  .ship-card.wait-ship { border-left: 5px solid #7e57c2; }
+  .ship-card.shipped { border-left: 5px solid #26a69a; opacity: .8; }
+  .ship-meta { font-size: .85em; margin-top: 6px; }
+  .ship-meta b { color: var(--accent); }
+  .ship-form label { display: block; font-size: .75em; color: var(--muted); margin: 8px 0 3px; }
+  .ship-form input, .ship-form textarea {
+    width: 100%; padding: 9px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fafafa;
+  }
+  .ship-btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .ship-btns button {
+    flex: 1; min-width: 140px; padding: 10px 8px; font-size: .82em; font-weight: 700;
+    border-radius: 8px; cursor: pointer; border: 1px solid var(--line); background: #fff;
+  }
+  .ship-btns .primary { background: var(--green); color: #fff; border: none; }
+  .ship-btns .copy { color: var(--green-dark); border-color: var(--green); }
+  .ship-btns button:disabled { opacity: .5; }
 
   /* 集計 */
   .sum-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; font-size: .88em; }
@@ -185,8 +232,9 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="orders" onclick="switchTab('orders')">注文一覧</div>
-  <div class="tab" data-tab="packing" onclick="switchTab('packing')">梱包リスト</div>
-  <div class="tab" data-tab="summary" onclick="switchTab('summary')">商品集計</div>
+  <div class="tab" data-tab="packing" onclick="switchTab('packing')">梱包</div>
+  <div class="tab" data-tab="shipping" onclick="switchTab('shipping')">発送</div>
+  <div class="tab" data-tab="summary" onclick="switchTab('summary')">集計</div>
 </div>
 
 <main>
@@ -206,9 +254,28 @@
 
   <div id="tab-packing" style="display:none;">
     <p style="font-size:.78em;color:var(--muted);margin-bottom:10px;">
-      「入金確認済」の注文をお客様ごとに表示します。梱包が終わったら「梱包済にする」を押してください。
+      「入金確認済」の注文をお客様ごとに表示します。梱包したら重量を計量・入力し、
+      配送方法を選んで「計量して梱包済にする」を押すと国際送料が自動計算・確定されます。
     </p>
     <div id="packingList"></div>
+  </div>
+
+  <div id="tab-shipping" style="display:none;">
+    <div class="ship-section-title">💰 送料入金待ち(梱包済)</div>
+    <p style="font-size:.75em;color:var(--muted);margin-bottom:8px;">
+      「送料案内をコピー」してLINEでお客様に送り、送料の振込を確認したらボタンで次へ進めてください。
+    </p>
+    <div id="feeWaitList"></div>
+
+    <div class="ship-section-title">✈️ 発送待ち(送料入金確認済)</div>
+    <p style="font-size:.75em;color:var(--muted);margin-bottom:8px;">
+      お届け先を確認し、EZPost(中華郵政)で伝票を作成したら追跡番号を入力して「発送済にする」。
+      「EZPost入力データをコピー」はClaude Cowork等での自動入力に使えます。
+    </p>
+    <div id="shipWaitList"></div>
+
+    <div class="ship-section-title">📮 発送済</div>
+    <div id="shippedList"></div>
   </div>
 
   <div id="tab-summary" style="display:none;">
@@ -276,6 +343,7 @@
   function renderAll() {
     renderOrders();
     renderPacking();
+    renderShipping();
     renderSummary();
   }
 
@@ -283,7 +351,7 @@
     document.querySelectorAll('.tab').forEach(function (t) {
       t.classList.toggle('active', t.dataset.tab === name);
     });
-    ['orders', 'packing', 'summary'].forEach(function (t) {
+    ['orders', 'packing', 'shipping', 'summary'].forEach(function (t) {
       document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
     });
   }
@@ -322,6 +390,12 @@
         '</select></div>' +
         '<ul class="oc-items">' + items + '</ul>' +
         '<div class="oc-total">合計 ' + o.total.toLocaleString() + ' 元' + (o.hasCustomItems ? ' ＋価格未定分' : '') + '</div>' +
+        (o.shipMethod
+          ? '<div class="ship-meta">🚚 ' + escapeHtml(o.shipMethod) + ' / ' + (o.weightG || '?') + 'g / 送料 <b>' +
+            (o.shipFee === '' ? '?' : Number(o.shipFee).toLocaleString()) + '元</b>' +
+            (o.trackingNo ? ' / 追跡: ' + escapeHtml(o.trackingNo) : '') +
+            (o.shippedDate ? ' / ' + escapeHtml(o.shippedDate) + '発送' : '') + '</div>'
+          : '') +
         (o.note ? '<div class="oc-note">📝 ' + escapeHtml(o.note) + '</div>' : '') +
         '<button type="button" class="edit-btn" onclick="openEdit(\'' + o.orderId + '\')">✏️ この注文を修正</button>' +
       '</div>';
@@ -349,7 +423,23 @@
       .updateOrderStatus(ADMIN_KEY, orderId, status);
   }
 
-  // ---- 梱包リスト ----
+  // ---- 梱包(計量・送料自動計算) ----
+  function methodOptions(selected) {
+    return (DATA.shippingRates || []).map(function (r) {
+      return '<option' + (r.method === selected ? ' selected' : '') + '>' + escapeHtml(r.method) + '</option>';
+    }).join('');
+  }
+
+  // 送料マスターから送料を計算(プレビュー用。確定時はサーバー側で再計算)
+  function clientCalcFee(method, weightG) {
+    var r = (DATA.shippingRates || []).find(function (x) { return x.method === method; });
+    if (!r || !(weightG > 0)) return null;
+    for (var i = 0; i < r.tiers.length; i++) {
+      if (weightG <= r.tiers[i].maxG) return r.tiers[i].fee;
+    }
+    return null;
+  }
+
   function renderPacking() {
     var list = DATA.orders.filter(function (o) { return o.status === '入金確認済'; });
     var box = document.getElementById('packingList');
@@ -357,37 +447,283 @@
       box.innerHTML = '<div class="empty">梱包待ち(入金確認済)の注文はありません</div>';
       return;
     }
+    if ((DATA.shippingRates || []).length === 0) {
+      box.innerHTML = '<div class="empty">送料マスターが空です。スプレッドシートの「送料マスター」に料金表を登録してください。</div>';
+      return;
+    }
     box.innerHTML = list.map(function (o) {
       var items = o.items.map(function (it) {
         return '<li><span>' + escapeHtml(it.name) + '</span><span class="pack-qty">× ' + it.qty + '</span></li>';
       }).join('');
+      var id = o.orderId;
       return '<div class="pack-card">' +
         '<div class="pack-name">' + escapeHtml(o.openChatName) + '</div>' +
-        '<div class="oc-id">' + escapeHtml(o.orderId) +
+        '<div class="oc-id">' + escapeHtml(id) +
           (o.lineName ? ' ・ LINE: ' + escapeHtml(o.lineName) : '') + '</div>' +
         '<ul class="pack-items">' + items + '</ul>' +
         (o.note ? '<div class="oc-note">📝 ' + escapeHtml(o.note) + '</div>' : '') +
-        '<button type="button" class="pack-done-btn" onclick="markPacked(\'' + o.orderId + '\', this)">✅ 梱包済にする</button>' +
+        '<div class="weigh-box">' +
+          '<div class="w-row">' +
+            '<input type="tel" class="w-weight" id="w-' + id + '" placeholder="重量" ' +
+              'value="' + (o.weightG || '') + '" oninput="updatePackFee(\'' + id + '\')"><span style="font-size:.85em;">g</span>' +
+            '<select class="w-method" id="m-' + id + '" onchange="updatePackFee(\'' + id + '\')">' +
+              methodOptions(o.shipMethod) + '</select>' +
+          '</div>' +
+          '<div class="w-fee" id="f-' + id + '"><small>重量を入力すると送料が表示されます</small></div>' +
+        '</div>' +
+        '<button type="button" class="pack-done-btn" id="pb-' + id + '" onclick="packOrder(\'' + id + '\')">⚖️ 計量して梱包済にする(送料確定)</button>' +
       '</div>';
     }).join('');
+    list.forEach(function (o) { updatePackFee(o.orderId); });
   }
 
-  function markPacked(orderId, btn) {
+  function updatePackFee(orderId) {
+    var w = parseInt(document.getElementById('w-' + orderId).value, 10) || 0;
+    var method = document.getElementById('m-' + orderId).value;
+    var feeEl = document.getElementById('f-' + orderId);
+    if (!(w > 0)) {
+      feeEl.innerHTML = '<small>重量を入力すると送料が表示されます</small>';
+      return;
+    }
+    var fee = clientCalcFee(method, w);
+    feeEl.innerHTML = (fee === null)
+      ? '<small style="color:#b3261e;">この重量に対応する料金帯がありません(送料マスターを確認)</small>'
+      : escapeHtml(method) + ' 送料: ' + fee.toLocaleString() + ' 元';
+  }
+
+  function packOrder(orderId) {
+    var w = parseInt(document.getElementById('w-' + orderId).value, 10) || 0;
+    var method = document.getElementById('m-' + orderId).value;
+    if (!(w > 0)) { showToast('重量(g)を入力してください'); return; }
+    if (clientCalcFee(method, w) === null) { showToast('この重量に対応する料金帯がありません'); return; }
+
+    var btn = document.getElementById('pb-' + orderId);
     btn.disabled = true;
-    btn.textContent = '更新中…';
+    btn.textContent = '確定中…';
     google.script.run
-      .withSuccessHandler(function () {
+      .withSuccessHandler(function (res) {
         var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
-        if (o) o.status = '梱包済';
+        if (o) {
+          o.status = '梱包済';
+          o.weightG = res.weightG;
+          o.shipMethod = res.method;
+          o.shipFee = res.fee;
+        }
         renderAll();
-        showToast(orderId + ' を梱包済にしました');
+        showToast(orderId + ': ' + res.method + ' ' + res.fee + '元で梱包済にしました。発送タブから送料案内を送れます');
       })
       .withFailureHandler(function (err) {
         btn.disabled = false;
-        btn.textContent = '✅ 梱包済にする';
+        btn.textContent = '⚖️ 計量して梱包済にする(送料確定)';
+        showToast('確定に失敗: ' + err.message);
+      })
+      .setPacked(ADMIN_KEY, orderId, w, method);
+  }
+
+  // ---- 発送タブ ----
+  function renderShipping() {
+    var feeWait = DATA.orders.filter(function (o) { return o.status === '梱包済'; });
+    var shipWait = DATA.orders.filter(function (o) { return o.status === '送料入金確認済'; });
+    var shipped = DATA.orders.filter(function (o) { return o.status === '発送済'; }).slice(0, 10);
+
+    var feeBox = document.getElementById('feeWaitList');
+    feeBox.innerHTML = feeWait.length === 0
+      ? '<div class="empty">送料入金待ちの注文はありません</div>'
+      : feeWait.map(function (o) {
+          return '<div class="ship-card wait-fee">' +
+            '<div class="pack-name">' + escapeHtml(o.openChatName) + '</div>' +
+            '<div class="oc-id">' + escapeHtml(o.orderId) + '</div>' +
+            '<div class="ship-meta">' + escapeHtml(o.shipMethod || '') + ' / ' +
+              (o.weightG || '?') + 'g / 送料 <b>' +
+              (o.shipFee === '' ? '?' : Number(o.shipFee).toLocaleString()) + ' 元</b></div>' +
+            '<div class="ship-btns">' +
+              '<button type="button" class="copy" onclick="copyShippingNotice(\'' + o.orderId + '\', this)">📋 送料案内をコピー</button>' +
+              '<button type="button" class="primary" onclick="confirmShipFee(\'' + o.orderId + '\', this)">💰 送料入金確認済にする</button>' +
+            '</div></div>';
+        }).join('');
+
+    var shipBox = document.getElementById('shipWaitList');
+    shipBox.innerHTML = shipWait.length === 0
+      ? '<div class="empty">発送待ちの注文はありません</div>'
+      : shipWait.map(function (o) {
+          var id = o.orderId;
+          return '<div class="ship-card wait-ship">' +
+            '<div class="pack-name">' + escapeHtml(o.openChatName) + '</div>' +
+            '<div class="oc-id">' + escapeHtml(id) + '</div>' +
+            '<div class="ship-meta">' + escapeHtml(o.shipMethod || '') + ' / ' +
+              (o.weightG || '?') + 'g / 送料 <b>' +
+              (o.shipFee === '' ? '?' : Number(o.shipFee).toLocaleString()) + ' 元</b>(入金確認済)</div>' +
+            '<div class="ship-form">' +
+              '<label>お届け先氏名</label>' +
+              '<input type="text" id="rn-' + id + '" value="' + escapeHtml(o.recvName) + '" maxlength="50">' +
+              '<label>お届け先住所</label>' +
+              '<textarea id="ra-' + id + '" rows="2" maxlength="200">' + escapeHtml(o.recvAddress) + '</textarea>' +
+              '<label>お届け先電話番号</label>' +
+              '<input type="text" id="rp-' + id + '" value="' + escapeHtml(o.recvPhone) + '" maxlength="30">' +
+              '<label>追跡番号(EZPostで伝票作成後に入力)</label>' +
+              '<input type="text" id="tn-' + id + '" value="' + escapeHtml(o.trackingNo) + '" maxlength="40" placeholder="例: EE123456789TW">' +
+            '</div>' +
+            '<div class="ship-btns">' +
+              '<button type="button" onclick="saveShip(\'' + id + '\', false, this)">💾 お届け先を保存</button>' +
+              '<button type="button" class="copy" onclick="copyEzpost(\'' + id + '\', this)">📋 EZPost入力データをコピー</button>' +
+              '<button type="button" class="primary" onclick="saveShip(\'' + id + '\', true, this)">✈️ 発送済にする</button>' +
+            '</div></div>';
+        }).join('');
+
+    var doneBox = document.getElementById('shippedList');
+    doneBox.innerHTML = shipped.length === 0
+      ? '<div class="empty">発送済の注文はありません</div>'
+      : shipped.map(function (o) {
+          return '<div class="ship-card shipped">' +
+            '<div class="pack-name">' + escapeHtml(o.openChatName) + '</div>' +
+            '<div class="oc-id">' + escapeHtml(o.orderId) + ' ・ ' + escapeHtml(o.shippedDate || '') + '</div>' +
+            '<div class="ship-meta">' + escapeHtml(o.shipMethod || '') +
+              (o.trackingNo ? ' / 追跡: ' + escapeHtml(o.trackingNo) : '') + '</div>' +
+            '<div class="ship-btns">' +
+              '<button type="button" class="copy" onclick="copyShippedMsg(\'' + o.orderId + '\', this)">📋 発送完了メッセージをコピー</button>' +
+            '</div></div>';
+        }).join('');
+  }
+
+  function confirmShipFee(orderId, btn) {
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function () {
+        var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
+        if (o) o.status = '送料入金確認済';
+        renderAll();
+        showToast(orderId + ' を送料入金確認済にしました');
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
         showToast('変更に失敗: ' + err.message);
       })
-      .updateOrderStatus(ADMIN_KEY, orderId, '梱包済');
+      .updateOrderStatus(ADMIN_KEY, orderId, '送料入金確認済');
+  }
+
+  function saveShip(orderId, markAsShipped, btn) {
+    var info = {
+      recvName: document.getElementById('rn-' + orderId).value.trim(),
+      recvAddress: document.getElementById('ra-' + orderId).value.trim(),
+      recvPhone: document.getElementById('rp-' + orderId).value.trim(),
+      trackingNo: document.getElementById('tn-' + orderId).value.trim()
+    };
+    if (markAsShipped && !info.recvName) { showToast('お届け先氏名を入力してください'); return; }
+    if (markAsShipped && !info.recvAddress) { showToast('お届け先住所を入力してください'); return; }
+
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function (res) {
+        var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
+        if (o) {
+          o.recvName = info.recvName;
+          o.recvAddress = info.recvAddress;
+          o.recvPhone = info.recvPhone;
+          o.trackingNo = info.trackingNo;
+          if (res.shipped) {
+            o.status = '発送済';
+            o.shippedDate = res.shippedDate;
+          }
+        }
+        renderAll();
+        showToast(res.shipped ? orderId + ' を発送済にしました' : orderId + ' のお届け先を保存しました');
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        showToast('保存に失敗: ' + err.message);
+      })
+      .saveShipping(ADMIN_KEY, orderId, info, markAsShipped);
+  }
+
+  // ---- コピー用メッセージ ----
+  function copyShippingNotice(orderId, btn) {
+    var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
+    if (!o) return;
+    var pay = DATA.payment || {};
+    var lines = [
+      '【国際送料のご案内】',
+      escapeNone(o.openChatName) + ' 様',
+      '注文番号: ' + o.orderId,
+      '',
+      '梱包が完了しました!',
+      '配送方法: ' + o.shipMethod,
+      '重量: ' + o.weightG + 'g',
+      '国際送料: ' + Number(o.shipFee).toLocaleString() + '元',
+      '',
+      '▼お振込先(台湾郵便局)',
+      (pay.bankCode ? '郵局代号: ' + pay.bankCode : ''),
+      (pay.accountNumber ? '口座番号: ' + pay.accountNumber : ''),
+      (pay.accountName ? '口座名義: ' + pay.accountName : ''),
+      '',
+      'ご入金の確認後に発送いたします。'
+    ];
+    if (!o.recvName || !o.recvAddress) {
+      lines.push('※お届け先(氏名・住所・電話番号)がまだの方は、あわせてお知らせください。');
+    }
+    copyText(lines.filter(function (l) { return l !== ''; }).join('\n')
+      .replace(/\n\n+/g, '\n\n'), btn, '送料案内をコピーしました。LINEに貼り付けて送ってください');
+  }
+
+  function copyEzpost(orderId, btn) {
+    var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
+    if (!o) return;
+    var contents = o.items.map(function (it) { return it.name + ' x' + it.qty; }).join(', ');
+    var lines = [
+      '【EZPost入力データ】',
+      '注文番号: ' + o.orderId,
+      '配送方法: ' + (o.shipMethod || ''),
+      '重量(g): ' + (o.weightG || ''),
+      'お届け先氏名: ' + document.getElementById('rn-' + orderId).value.trim(),
+      'お届け先住所: ' + document.getElementById('ra-' + orderId).value.trim(),
+      'お届け先電話: ' + document.getElementById('rp-' + orderId).value.trim(),
+      '内容品: ' + contents,
+      '申告価格(元): ' + (o.total || 0)
+    ];
+    copyText(lines.join('\n'), btn, 'EZPost入力データをコピーしました');
+  }
+
+  function copyShippedMsg(orderId, btn) {
+    var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
+    if (!o) return;
+    var lines = [
+      '【発送のお知らせ】',
+      escapeNone(o.openChatName) + ' 様',
+      '注文番号: ' + o.orderId,
+      '',
+      '本日、' + (o.shipMethod || '国際郵便') + 'にて発送いたしました!',
+      (o.shippedDate ? '発送日: ' + o.shippedDate : ''),
+      (o.trackingNo ? '追跡番号: ' + o.trackingNo : ''),
+      '',
+      '▼配送状況の確認',
+      '中華郵政: https://postserv.post.gov.tw/pstmail/main_mail.html',
+      '日本郵便: https://trackings.post.japanpost.jp/services/srv/search/',
+      '',
+      'お届けまで今しばらくお待ちください。'
+    ];
+    copyText(lines.filter(function (l, i) { return !(l === '' && lines[i - 1] === ''); }).join('\n'),
+      btn, '発送完了メッセージをコピーしました');
+  }
+
+  function escapeNone(s) { return String(s); } // コピー用テキストはHTMLエスケープ不要
+
+  function copyText(text, btn, msg) {
+    var done = function () { showToast(msg); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
   }
 
   // ---- 商品集計 ----

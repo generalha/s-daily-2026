@@ -198,6 +198,19 @@
     </div>
 
     <div class="card">
+      <h2>お届け先(国際発送用・任意)</h2>
+      <div class="hint" style="margin-bottom:8px;">
+        EMS・国際小包での発送に必要です。後からLINEでお知らせいただいてもかまいません。
+      </div>
+      <label>お届け先氏名</label>
+      <input type="text" id="recvName" placeholder="例: 山田 花子" maxlength="50">
+      <label>お届け先住所(郵便番号から)</label>
+      <textarea id="recvAddress" rows="2" placeholder="例: 〒123-4567 東京都○○区○○ 1-2-3" maxlength="200"></textarea>
+      <label>お届け先電話番号</label>
+      <input type="text" id="recvPhone" placeholder="例: 090-1234-5678" maxlength="30">
+    </div>
+
+    <div class="card">
       <h2>備考</h2>
       <textarea id="note" rows="2" placeholder="ご要望などあればご記入ください" maxlength="300"></textarea>
     </div>
@@ -411,6 +424,9 @@
         openChatName: document.getElementById('openChatName').value.trim(),
         lineName: document.getElementById('lineName').value.trim(),
         note: document.getElementById('note').value.trim(),
+        recvName: document.getElementById('recvName').value.trim(),
+        recvAddress: document.getElementById('recvAddress').value.trim(),
+        recvPhone: document.getElementById('recvPhone').value.trim(),
         enteredBy: IS_ADMIN_ENTRY ? '管理者' : 'お客様',
         items: collectItems()
       });

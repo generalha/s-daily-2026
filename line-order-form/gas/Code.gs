@@ -15,15 +15,24 @@
 var SHEET_PRODUCTS = '商品マスター';
 var SHEET_ORDERS   = '注文一覧';
 var SHEET_SETTINGS = '設定';
+var SHEET_SHIPPING = '送料マスター';
 var TIMEZONE       = 'Asia/Taipei';
 
-var STATUSES = ['未対応', '入金確認済', '梱包済', '受渡済', 'キャンセル'];
+// 発送フロー: 未対応 →(商品代入金)→ 入金確認済 →(計量・送料確定)→ 梱包済
+//   →(送料入金)→ 送料入金確認済 →(EZPost入力・発送)→ 発送済 →(到着確認)→ 受渡済
+var STATUSES = ['未対応', '入金確認済', '梱包済', '送料入金確認済', '発送済', '受渡済', 'キャンセル'];
 
 var ORDER_HEADERS = [
   '注文ID', '注文日時', 'オープンチャット名', 'LINEアカウント名',
   '商品名', '数量', '単価(元)', '小計(元)', '注文合計(元)',
-  'ステータス', '入力者', '備考'
+  'ステータス', '入力者', '備考',
+  '重量(g)', '配送方法', '国際送料(元)',
+  'お届け先氏名', 'お届け先住所', 'お届け先電話', '追跡番号', '発送日'
 ];
+// 列番号(1始まり)
+var COL_STATUS = 10, COL_WEIGHT = 13, COL_METHOD = 14, COL_SHIPFEE = 15,
+    COL_RECV_NAME = 16, COL_RECV_ADDR = 17, COL_RECV_PHONE = 18,
+    COL_TRACKING = 19, COL_SHIPDATE = 20;
 
 // ===== エントリーポイント =====
 
@@ -129,7 +138,12 @@ function submitOrder(data) {
         i === 0 ? total : '',   // 注文合計は先頭行のみ(SUMの二重計上防止)
         STATUSES[0],
         enteredBy,
-        i === 0 ? String(data.note || '').trim() : ''
+        i === 0 ? String(data.note || '').trim() : '',
+        '', '', '',             // 重量・配送方法・国際送料(梱包時に入力)
+        i === 0 ? String(data.recvName || '').trim() : '',
+        i === 0 ? String(data.recvAddress || '').trim() : '',
+        i === 0 ? String(data.recvPhone || '').trim() : '',
+        '', ''                  // 追跡番号・発送日(発送時に入力)
       ];
     });
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, ORDER_HEADERS.length).setValues(rows);
@@ -157,8 +171,53 @@ function getAdminData(key) {
   return {
     statuses: STATUSES,
     products: getActiveProducts_(),
+    shippingRates: getShippingRates_(),
+    payment: getPaymentInfo_(),
     orders: readOrders_().reverse() // 新しい順
   };
+}
+
+/**
+ * 管理者ページ用: 計量した重量と配送方法から国際送料を確定し、
+ * 注文を「梱包済」にする。送料はサーバー側で送料マスターから計算する。
+ */
+function setPacked(key, orderId, weightG, method) {
+  requireAdmin_(key);
+  var w = Math.ceil(Number(weightG));
+  if (!(w > 0) || w > 100000) throw new Error('重量(g)を正しく入力してください。');
+  var fee = calcShippingFee_(method, w);
+  if (fee === null) {
+    throw new Error('「' + method + '」の料金表に ' + w + 'g に該当する重量帯がありません。送料マスターをご確認ください。');
+  }
+
+  var fields = {};
+  fields[COL_WEIGHT] = w;
+  fields[COL_METHOD] = method;
+  fields[COL_SHIPFEE] = fee;
+  setOrderFields_(orderId, fields, '梱包済');
+  return { orderId: orderId, weightG: w, method: method, fee: fee };
+}
+
+/**
+ * 管理者ページ用: お届け先・追跡番号を保存する。
+ * markAsShipped が true の場合は発送日を記録して「発送済」にする。
+ */
+function saveShipping(key, orderId, info, markAsShipped) {
+  requireAdmin_(key);
+  info = info || {};
+  var fields = {};
+  fields[COL_RECV_NAME]  = String(info.recvName || '').trim();
+  fields[COL_RECV_ADDR]  = String(info.recvAddress || '').trim();
+  fields[COL_RECV_PHONE] = String(info.recvPhone || '').trim();
+  fields[COL_TRACKING]   = String(info.trackingNo || '').trim();
+
+  var newStatus = null;
+  if (markAsShipped) {
+    fields[COL_SHIPDATE] = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd');
+    newStatus = '発送済';
+  }
+  setOrderFields_(orderId, fields, newStatus);
+  return { orderId: orderId, shipped: !!markAsShipped, shippedDate: fields[COL_SHIPDATE] || '' };
 }
 
 /**
@@ -237,6 +296,8 @@ function updateOrder(key, orderId, data) {
 
     var editMark = '【' + Utilities.formatDate(new Date(), TIMEZONE, 'M/d HH:mm') + ' 修正】';
     var note = String(data.note || '').trim();
+    // 発送関連(重量〜発送日)は既存の値を維持する
+    var shipping = firstOld.slice(COL_WEIGHT - 1, COL_SHIPDATE);
     var newRows = items.map(function (it, idx) {
       return [
         orderId, orderedAt,
@@ -245,7 +306,7 @@ function updateOrder(key, orderId, data) {
         idx === 0 ? total : '',
         status, enteredBy,
         idx === 0 ? (editMark + (note ? ' ' + note : '')) : ''
-      ];
+      ].concat(idx === 0 ? shipping : ['', '', '', '', '', '', '', '']);
     });
 
     // 既存行を下から削除し、元の位置に新しい行を挿入する
@@ -315,7 +376,10 @@ function readOrders_() {
           note: String(r[11] || ''),
           total: 0,
           hasCustomItems: false,
-          items: []
+          items: [],
+          weightG: 0, shipMethod: '', shipFee: '',
+          recvName: '', recvAddress: '', recvPhone: '',
+          trackingNo: '', shippedDate: ''
         };
         orderIdsInOrder.push(id);
       }
@@ -330,6 +394,18 @@ function readOrders_() {
       if (custom) orders[id].hasCustomItems = true;
       if (subtotal !== '' && subtotal !== null) orders[id].total += Number(subtotal);
       if (!orders[id].note && r[11]) orders[id].note = String(r[11]);
+      // 発送関連は先頭行にのみ入っているため、値のある行から拾う
+      if (r[12] !== '' && r[12] !== null && !orders[id].weightG) orders[id].weightG = Number(r[12]);
+      if (r[13] && !orders[id].shipMethod) orders[id].shipMethod = String(r[13]);
+      if (r[14] !== '' && r[14] !== null && orders[id].shipFee === '') orders[id].shipFee = Number(r[14]);
+      if (r[15] && !orders[id].recvName) orders[id].recvName = String(r[15]);
+      if (r[16] && !orders[id].recvAddress) orders[id].recvAddress = String(r[16]);
+      if (r[17] && !orders[id].recvPhone) orders[id].recvPhone = String(r[17]);
+      if (r[18] && !orders[id].trackingNo) orders[id].trackingNo = String(r[18]);
+      if (r[19] && !orders[id].shippedDate) {
+        orders[id].shippedDate = r[19] instanceof Date
+          ? Utilities.formatDate(r[19], TIMEZONE, 'yyyy/MM/dd') : String(r[19]);
+      }
     });
   }
   return orderIdsInOrder.map(function (id) { return orders[id]; });
@@ -406,6 +482,80 @@ function getPaymentInfo_() {
     accountName:   s['振込先_口座名義'] || '',
     paymentNote:   s['振込メモ'] || ''
   };
+}
+
+/**
+ * 送料マスターを読み込む。
+ * @return {Array} [{method: 'EMS', tiers: [{maxG: 500, fee: 450}, ...]}, ...]
+ */
+function getShippingRates_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_SHIPPING);
+  if (!sheet) return [];
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  var values = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  var byMethod = {};
+  var methodOrder = [];
+  values.forEach(function (r) {
+    var method = String(r[0]).trim();
+    var maxG = Number(r[1]);
+    var fee = Number(r[2]);
+    if (!method || !(maxG > 0) || isNaN(fee)) return;
+    if (!byMethod[method]) {
+      byMethod[method] = [];
+      methodOrder.push(method);
+    }
+    byMethod[method].push({ maxG: maxG, fee: fee });
+  });
+  return methodOrder.map(function (m) {
+    byMethod[m].sort(function (a, b) { return a.maxG - b.maxG; });
+    return { method: m, tiers: byMethod[m] };
+  });
+}
+
+/** 配送方法と重量(g)から送料を計算する。該当帯がなければ null。 */
+function calcShippingFee_(method, weightG) {
+  var rates = getShippingRates_();
+  for (var i = 0; i < rates.length; i++) {
+    if (rates[i].method !== method) continue;
+    var tiers = rates[i].tiers;
+    for (var j = 0; j < tiers.length; j++) {
+      if (weightG <= tiers[j].maxG) return tiers[j].fee;
+    }
+    return null; // 最大重量帯を超過
+  }
+  return null; // 未知の配送方法
+}
+
+/**
+ * 注文の先頭行に指定フィールドを書き込み、statusが指定されていれば全行のステータスを更新する。
+ * @param {Object} fields {列番号(1始まり): 値}
+ */
+function setOrderFields_(orderId, fields, status) {
+  if (status && STATUSES.indexOf(status) === -1) throw new Error('不正なステータスです。');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20 * 1000);
+  try {
+    var sheet = getSheet_(SHEET_ORDERS);
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) throw new Error('注文番号「' + orderId + '」は見つかりません。');
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    var firstRow = 0;
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(orderId)) {
+        if (!firstRow) firstRow = i + 2;
+        if (status) sheet.getRange(i + 2, COL_STATUS).setValue(status);
+      }
+    }
+    if (!firstRow) throw new Error('注文番号「' + orderId + '」は見つかりません。');
+    for (var col in fields) {
+      sheet.getRange(firstRow, Number(col)).setValue(fields[col]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function isValidAdminKey_(key) {
@@ -494,14 +644,32 @@ function setupSheets() {
     p.setFrozenRows(1);
   }
 
-  if (!ss.getSheetByName(SHEET_ORDERS)) {
-    var o = ss.insertSheet(SHEET_ORDERS);
-    o.getRange(1, 1, 1, ORDER_HEADERS.length).setValues([ORDER_HEADERS])
-      .setFontWeight('bold').setBackground('#cfe2f3');
+  var o = ss.getSheetByName(SHEET_ORDERS);
+  if (!o) {
+    o = ss.insertSheet(SHEET_ORDERS);
     o.setFrozenRows(1);
-    // ステータス列に入力規則(プルダウン)を設定
-    var rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUSES, true).build();
-    o.getRange(2, 10, o.getMaxRows() - 1, 1).setDataValidation(rule);
+  }
+  // ヘッダーは常に書き直す(旧バージョンからの列追加にも対応)
+  o.getRange(1, 1, 1, ORDER_HEADERS.length).setValues([ORDER_HEADERS])
+    .setFontWeight('bold').setBackground('#cfe2f3');
+  // ステータス列に入力規則(プルダウン)を設定(ステータス追加にも対応して毎回更新)
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUSES, true).build();
+  o.getRange(2, COL_STATUS, o.getMaxRows() - 1, 1).setDataValidation(rule);
+
+  if (!ss.getSheetByName(SHEET_SHIPPING)) {
+    var sh = ss.insertSheet(SHEET_SHIPPING);
+    sh.getRange(1, 1, 1, 3).setValues([['配送方法', '重量上限(g)', '料金(元)']])
+      .setFontWeight('bold').setBackground('#d9d2e9');
+    // ※サンプル料金です。必ず中華郵政の最新料金表に合わせて更新してください。
+    var rows = [];
+    for (var w = 500, fee = 450; w <= 10000; w += 500, fee += 80) {
+      rows.push(['EMS', w, fee]);
+    }
+    for (var w2 = 1000, fee2 = 450; w2 <= 10000; w2 += 1000, fee2 += 120) {
+      rows.push(['国際小包(航空)', w2, fee2]);
+    }
+    sh.getRange(2, 1, rows.length, 3).setValues(rows);
+    sh.setFrozenRows(1);
   }
 
   if (!ss.getSheetByName(SHEET_SETTINGS)) {
@@ -526,7 +694,9 @@ function setupSheets() {
     'セットアップ完了!\n\n' +
     '1.「設定」シートで振込先口座を入力してください。\n' +
     '2.「商品マスター」シートに商品を登録してください。\n' +
-    '3. デプロイしてURLを取得してください(SETUP.md参照)。'
+    '3.「送料マスター」の料金はサンプルです。必ず中華郵政の\n' +
+    '   最新の国際郵便料金表(EMS/国際小包)に更新してください。\n' +
+    '4. デプロイしてURLを取得してください(SETUP.md参照)。'
   );
 }
 
