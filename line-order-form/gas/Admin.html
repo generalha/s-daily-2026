@@ -97,6 +97,71 @@
   .sum-table td { padding: 10px; border-bottom: 1px solid var(--line); }
   .sum-table td:last-child, .sum-table th:last-child { text-align: right; }
 
+  /* 注文番号呼び出し */
+  .lookup {
+    display: flex; gap: 8px; margin-bottom: 12px;
+    background: #fff; padding: 10px; border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .lookup input {
+    flex: 1; padding: 10px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  .lookup button {
+    padding: 10px 16px; font-size: .85em; font-weight: 700;
+    border: none; border-radius: 8px; background: #2b3a33; color: #fff; cursor: pointer;
+    white-space: nowrap;
+  }
+  .edit-btn {
+    margin-top: 8px; padding: 8px 14px; font-size: .8em;
+    border: 1px solid var(--green); color: var(--green-dark); background: #fff;
+    border-radius: 999px; cursor: pointer;
+  }
+
+  /* 修正モーダル */
+  .overlay {
+    display: none; position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,.5); padding: 16px;
+    align-items: center; justify-content: center;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 18px;
+    width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto;
+  }
+  .modal h3 { font-size: 1em; margin-bottom: 12px; text-align: center; }
+  .modal label { display: block; font-size: .78em; color: var(--muted); margin: 10px 0 4px; }
+  .modal input[type=text], .modal input[type=tel], .modal textarea, .modal select {
+    width: 100%; padding: 10px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fafafa;
+  }
+  .e-row {
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px; margin-bottom: 8px; background: #fbfcfb;
+  }
+  .e-row .e-sub { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .e-row .e-qty { width: 80px !important; text-align: center; }
+  .e-row .e-price { flex: 1; }
+  .e-row .e-price-fixed {
+    flex: 1; font-size: .85em; color: var(--accent); font-weight: 700; padding: 10px 4px;
+  }
+  .e-row .e-del {
+    border: none; background: none; color: #c33; font-size: 1.2em; padding: 6px; cursor: pointer;
+  }
+  .e-row .e-name { margin-top: 8px; }
+  .e-add-btn {
+    width: 100%; padding: 10px; font-size: .85em;
+    border: 1px dashed var(--green); color: var(--green-dark);
+    background: #fff; border-radius: 8px; cursor: pointer;
+  }
+  .e-total { text-align: right; font-weight: 700; color: var(--accent); margin-top: 10px; }
+  .modal .btns { display: flex; gap: 10px; margin-top: 16px; }
+  .modal .btns button { flex: 1; padding: 12px; border-radius: 999px; font-size: .95em; cursor: pointer; }
+  .btn-back { border: 1px solid var(--line); background: #fff; }
+  .btn-ok { border: none; background: var(--green); color: #fff; font-weight: 700; }
+  .btn-ok:disabled { background: #bbb; }
+  .modal .hint { font-size: .72em; color: var(--muted); margin-top: 4px; }
+
   .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: .85em; }
   .loading { text-align: center; padding: 40px 0; color: var(--muted); font-size: .85em; }
   .spinner {
@@ -126,6 +191,10 @@
 
 <main>
   <div id="tab-orders">
+    <div class="lookup">
+      <input type="text" id="lookupInput" placeholder="注文番号を入力(例: 20260811-001)">
+      <button type="button" onclick="openEditByNumber()">✏️ 呼び出して修正</button>
+    </div>
     <div class="filters">
       <select id="statusFilter" onchange="renderOrders()">
         <option value="">すべてのステータス</option>
@@ -149,6 +218,32 @@
     <div id="summaryBox"></div>
   </div>
 </main>
+
+<!-- 注文修正モーダル -->
+<div class="overlay" id="editOverlay">
+  <div class="modal">
+    <h3>✏️ 注文修正 <span id="editOrderId" style="color:var(--green-dark);"></span></h3>
+
+    <label>オープンチャット名(必須)</label>
+    <input type="text" id="e-openChatName" maxlength="50">
+    <label>LINEアカウント名</label>
+    <input type="text" id="e-lineName" maxlength="50">
+
+    <label>商品</label>
+    <div id="editItems"></div>
+    <button type="button" class="e-add-btn" onclick="editAddRow()">＋ 商品を追加</button>
+    <div class="hint">マスター商品の価格は保存時に商品マスターの最新価格で再計算されます。自由入力商品は単価を直接入力できます(空欄なら価格未定)。</div>
+    <div class="e-total">合計 <span id="editTotal">0</span> 元<span id="editTotalNote"></span></div>
+
+    <label>備考</label>
+    <textarea id="e-note" rows="2" maxlength="300"></textarea>
+
+    <div class="btns">
+      <button type="button" class="btn-back" onclick="closeEdit()">キャンセル</button>
+      <button type="button" class="btn-ok" id="editSaveBtn" onclick="saveEdit()">保存する</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -228,6 +323,7 @@
         '<ul class="oc-items">' + items + '</ul>' +
         '<div class="oc-total">合計 ' + o.total.toLocaleString() + ' 元' + (o.hasCustomItems ? ' ＋価格未定分' : '') + '</div>' +
         (o.note ? '<div class="oc-note">📝 ' + escapeHtml(o.note) + '</div>' : '') +
+        '<button type="button" class="edit-btn" onclick="openEdit(\'' + o.orderId + '\')">✏️ この注文を修正</button>' +
       '</div>';
     }).join('');
   }
@@ -325,6 +421,157 @@
       '<tr><th>商品名</th><th style="text-align:right;">数量</th><th>金額</th></tr>' + rows +
       '<tr><td style="font-weight:700;">合計</td><td></td><td style="font-weight:700;color:var(--accent);">' +
       totalAmount.toLocaleString() + '元</td></tr></table>';
+  }
+
+  // ---- 注文修正(暗号キー必須・サーバー側でも検証) ----
+  var editingOrderId = null;
+  var editRowSeq = 0;
+
+  function openEditByNumber() {
+    var id = document.getElementById('lookupInput').value.trim();
+    if (!id) { showToast('注文番号を入力してください'); return; }
+    openEdit(id);
+  }
+
+  function openEdit(orderId) {
+    showToast('注文を呼び出しています…');
+    google.script.run
+      .withSuccessHandler(function (order) {
+        editingOrderId = order.orderId;
+        document.getElementById('editOrderId').textContent = order.orderId;
+        document.getElementById('e-openChatName').value = order.openChatName;
+        document.getElementById('e-lineName').value = order.lineName;
+        document.getElementById('e-note').value = order.note;
+        document.getElementById('editItems').innerHTML = '';
+        order.items.forEach(function (it) { editAddRow(it); });
+        if (order.items.length === 0) editAddRow();
+        updateEditTotal();
+        document.getElementById('editOverlay').classList.add('show');
+      })
+      .withFailureHandler(function (err) { showToast(err.message); })
+      .getOrderById(ADMIN_KEY, orderId);
+  }
+
+  function closeEdit() {
+    document.getElementById('editOverlay').classList.remove('show');
+    editingOrderId = null;
+  }
+
+  function productOptions(selectedId) {
+    var opts = (DATA.products || []).map(function (p) {
+      return '<option value="' + escapeHtml(p.id) + '"' + (p.id === selectedId ? ' selected' : '') + '>' +
+        escapeHtml(p.name) + (p.price === '' ? '' : '(' + p.price + '元)') + '</option>';
+    });
+    opts.push('<option value=""' + (selectedId ? '' : ' selected') + '>✏️ 自由入力(リストにない商品)</option>');
+    return opts.join('');
+  }
+
+  function editAddRow(item) {
+    item = item || { productId: '', name: '', qty: 1, price: '' };
+    var id = 'e-row-' + (editRowSeq++);
+    var div = document.createElement('div');
+    div.className = 'e-row';
+    div.id = id;
+    div.innerHTML =
+      '<select class="e-prod" onchange="onEditProdChange(\'' + id + '\')">' +
+        productOptions(item.productId) + '</select>' +
+      '<input type="text" class="e-name" placeholder="商品名(自由入力)" maxlength="60" ' +
+        'value="' + escapeHtml(item.productId ? '' : item.name) + '">' +
+      '<div class="e-sub">' +
+        '<input type="tel" class="e-qty" value="' + (Number(item.qty) || 1) + '" oninput="updateEditTotal()">' +
+        '<input type="tel" class="e-price" placeholder="単価(元)" value="' +
+          (item.productId ? '' : escapeHtml(String(item.price))) + '" oninput="updateEditTotal()">' +
+        '<div class="e-price-fixed"></div>' +
+        '<button type="button" class="e-del" onclick="editDelRow(\'' + id + '\')">✕</button>' +
+      '</div>';
+    document.getElementById('editItems').appendChild(div);
+    onEditProdChange(id);
+  }
+
+  function editDelRow(id) {
+    var el = document.getElementById(id);
+    if (el) el.remove();
+    updateEditTotal();
+  }
+
+  function onEditProdChange(id) {
+    var row = document.getElementById(id);
+    var prodId = row.querySelector('.e-prod').value;
+    var isCustom = prodId === '';
+    row.querySelector('.e-name').style.display = isCustom ? 'block' : 'none';
+    row.querySelector('.e-price').style.display = isCustom ? 'block' : 'none';
+    var fixed = row.querySelector('.e-price-fixed');
+    if (isCustom) {
+      fixed.style.display = 'none';
+    } else {
+      var p = (DATA.products || []).find(function (x) { return x.id === prodId; });
+      fixed.style.display = 'block';
+      fixed.textContent = (p && p.price !== '') ? '単価 ' + p.price + '元' : '価格未定';
+    }
+    updateEditTotal();
+  }
+
+  function collectEditItems() {
+    var items = [];
+    document.querySelectorAll('#editItems .e-row').forEach(function (row) {
+      var prodId = row.querySelector('.e-prod').value;
+      var qty = parseInt(row.querySelector('.e-qty').value, 10) || 0;
+      if (qty <= 0) return;
+      if (prodId) {
+        items.push({ productId: prodId, name: '', qty: qty, price: '' });
+      } else {
+        var name = row.querySelector('.e-name').value.trim();
+        if (!name) return;
+        var priceRaw = row.querySelector('.e-price').value.trim();
+        var price = (priceRaw === '' || isNaN(Number(priceRaw))) ? '' : Number(priceRaw);
+        items.push({ productId: '', name: name, qty: qty, price: price });
+      }
+    });
+    return items;
+  }
+
+  function updateEditTotal() {
+    var total = 0, hasNoPrice = false;
+    collectEditItems().forEach(function (it) {
+      if (it.productId) {
+        var p = (DATA.products || []).find(function (x) { return x.id === it.productId; });
+        if (p && p.price !== '') total += p.price * it.qty; else hasNoPrice = true;
+      } else {
+        if (it.price === '') hasNoPrice = true; else total += it.price * it.qty;
+      }
+    });
+    document.getElementById('editTotal').textContent = total.toLocaleString();
+    document.getElementById('editTotalNote').textContent = hasNoPrice ? '(＋価格未定分)' : '';
+  }
+
+  function saveEdit() {
+    var name = document.getElementById('e-openChatName').value.trim();
+    if (!name) { showToast('オープンチャット名を入力してください'); return; }
+    var items = collectEditItems();
+    if (items.length === 0) { showToast('商品を1つ以上入力してください'); return; }
+
+    var btn = document.getElementById('editSaveBtn');
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false;
+        btn.textContent = '保存する';
+        closeEdit();
+        showToast(res.orderId + ' を修正しました');
+        loadData();
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = '保存する';
+        showToast('保存に失敗: ' + err.message);
+      })
+      .updateOrder(ADMIN_KEY, editingOrderId, {
+        openChatName: name,
+        lineName: document.getElementById('e-lineName').value.trim(),
+        note: document.getElementById('e-note').value.trim(),
+        items: items
+      });
   }
 
   // ---- 共通 ----

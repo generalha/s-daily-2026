@@ -154,6 +154,145 @@ function submitOrder(data) {
  */
 function getAdminData(key) {
   requireAdmin_(key);
+  return {
+    statuses: STATUSES,
+    products: getActiveProducts_(),
+    orders: readOrders_().reverse() // 新しい順
+  };
+}
+
+/**
+ * 管理者ページ用: 注文番号で1件の注文を呼び出す(修正画面用)。
+ * 暗号キー(管理者キー)がなければ呼び出せない。
+ */
+function getOrderById(key, orderId) {
+  requireAdmin_(key);
+  var order = findOrder_(orderId);
+  if (!order) throw new Error('注文番号「' + orderId + '」は見つかりません。');
+
+  // 商品名がマスターに一致する明細には商品IDを付与(修正画面のプルダウン用)
+  var byName = {};
+  getActiveProducts_().forEach(function (p) { byName[p.name] = p; });
+  order.items.forEach(function (it) {
+    it.productId = byName[it.name] ? byName[it.name].id : '';
+  });
+  return order;
+}
+
+/**
+ * 管理者ページ用: 注文内容を修正する(暗号キー必須)。
+ * 注文日時・ステータス・入力者は維持し、明細・お客様情報・備考を差し替える。
+ * @param {Object} data {openChatName, lineName, note, items:[{productId, name, qty, price}]}
+ */
+function updateOrder(key, orderId, data) {
+  requireAdmin_(key);
+  if (!data || !data.openChatName || !String(data.openChatName).trim()) {
+    throw new Error('オープンチャット名を入力してください。');
+  }
+  var rawItems = (data.items || []).filter(function (it) {
+    return it && Number(it.qty) > 0 && (it.productId || (it.name && String(it.name).trim()));
+  });
+  if (rawItems.length === 0) {
+    throw new Error('商品を1つ以上入力してください。(注文の取消はステータスを「キャンセル」にしてください)');
+  }
+
+  // マスター商品は現在のマスター価格で再計算、自由入力商品は指定価格を採用
+  var master = {};
+  getActiveProducts_().forEach(function (p) { master[p.id] = p; });
+  var items = rawItems.map(function (it) {
+    var qty = Math.floor(Number(it.qty));
+    if (!(qty > 0) || qty > 9999) throw new Error('数量が正しくありません。');
+    var m = it.productId ? master[String(it.productId)] : null;
+    if (m) {
+      return { name: m.name, qty: qty, price: m.price, subtotal: m.price === '' ? '' : m.price * qty };
+    }
+    var price = (it.price === '' || it.price === null || it.price === undefined || isNaN(Number(it.price)))
+      ? '' : Number(it.price);
+    return { name: String(it.name).trim(), qty: qty, price: price, subtotal: price === '' ? '' : price * qty };
+  });
+  var total = items.reduce(function (sum, it) {
+    return sum + (it.subtotal === '' ? 0 : it.subtotal);
+  }, 0);
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20 * 1000);
+  try {
+    var sheet = getSheet_(SHEET_ORDERS);
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) throw new Error('注文番号「' + orderId + '」は見つかりません。');
+
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    var rowIdxs = []; // シート上の行番号(1始まり)
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(orderId)) rowIdxs.push(i + 2);
+    }
+    if (rowIdxs.length === 0) throw new Error('注文番号「' + orderId + '」は見つかりません。');
+
+    // 既存行から維持する情報を取得
+    var firstOld = sheet.getRange(rowIdxs[0], 1, 1, ORDER_HEADERS.length).getValues()[0];
+    var orderedAt = firstOld[1] instanceof Date
+      ? Utilities.formatDate(firstOld[1], TIMEZONE, 'yyyy/MM/dd HH:mm') : String(firstOld[1]);
+    var status = String(firstOld[9]) || STATUSES[0];
+    var enteredBy = String(firstOld[10]) || 'お客様';
+
+    var editMark = '【' + Utilities.formatDate(new Date(), TIMEZONE, 'M/d HH:mm') + ' 修正】';
+    var note = String(data.note || '').trim();
+    var newRows = items.map(function (it, idx) {
+      return [
+        orderId, orderedAt,
+        String(data.openChatName).trim(), String(data.lineName || '').trim(),
+        it.name, it.qty, it.price, it.subtotal,
+        idx === 0 ? total : '',
+        status, enteredBy,
+        idx === 0 ? (editMark + (note ? ' ' + note : '')) : ''
+      ];
+    });
+
+    // 既存行を下から削除し、元の位置に新しい行を挿入する
+    for (var d = rowIdxs.length - 1; d >= 0; d--) {
+      sheet.deleteRow(rowIdxs[d]);
+    }
+    var insertAt = rowIdxs[0];
+    sheet.insertRowsBefore(Math.min(insertAt, sheet.getLastRow() + 1), newRows.length);
+    sheet.getRange(insertAt, 1, newRows.length, ORDER_HEADERS.length).setValues(newRows);
+  } finally {
+    lock.releaseLock();
+  }
+
+  return { orderId: orderId, total: total };
+}
+
+/**
+ * 管理者ページ用: 注文のステータスを更新する(同一注文IDの全行)。
+ */
+function updateOrderStatus(key, orderId, status) {
+  requireAdmin_(key);
+  if (STATUSES.indexOf(status) === -1) throw new Error('不正なステータスです。');
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20 * 1000);
+  try {
+    var sheet = getSheet_(SHEET_ORDERS);
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { updated: 0 };
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    var updated = 0;
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(orderId)) {
+        sheet.getRange(i + 2, 10).setValue(status); // 10列目 = ステータス
+        updated++;
+      }
+    }
+    return { updated: updated };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ===== 内部ヘルパー =====
+
+/** 注文一覧シートを注文ID単位のオブジェクト配列(シート順)として読み込む。 */
+function readOrders_() {
   var sheet = getSheet_(SHEET_ORDERS);
   var lastRow = sheet.getLastRow();
   var orders = {};
@@ -193,41 +332,22 @@ function getAdminData(key) {
       if (!orders[id].note && r[11]) orders[id].note = String(r[11]);
     });
   }
-
-  return {
-    statuses: STATUSES,
-    orders: orderIdsInOrder.map(function (id) { return orders[id]; }).reverse() // 新しい順
-  };
+  return orderIdsInOrder.map(function (id) { return orders[id]; });
 }
 
-/**
- * 管理者ページ用: 注文のステータスを更新する(同一注文IDの全行)。
- */
-function updateOrderStatus(key, orderId, status) {
-  requireAdmin_(key);
-  if (STATUSES.indexOf(status) === -1) throw new Error('不正なステータスです。');
-
-  var lock = LockService.getScriptLock();
-  lock.waitLock(20 * 1000);
-  try {
-    var sheet = getSheet_(SHEET_ORDERS);
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) return { updated: 0 };
-    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    var updated = 0;
-    for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]) === String(orderId)) {
-        sheet.getRange(i + 2, 10).setValue(status); // 10列目 = ステータス
-        updated++;
-      }
+/** 注文番号で1件の注文を探す。修正画面用に備考から修正マークを除去して返す。 */
+function findOrder_(orderId) {
+  var target = String(orderId || '').trim();
+  if (!target) return null;
+  var list = readOrders_();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].orderId === target) {
+      list[i].note = list[i].note.replace(/^【[^】]*修正】\s*/, '');
+      return list[i];
     }
-    return { updated: updated };
-  } finally {
-    lock.releaseLock();
   }
+  return null;
 }
-
-// ===== 内部ヘルパー =====
 
 function getSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
