@@ -1,0 +1,491 @@
+<style>
+  :root {
+    --green: #06c755;      /* LINEグリーン */
+    --green-dark: #05a648;
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --text: #222;
+    --muted: #777;
+    --line: #e3e6e4;
+    --accent: #ff6b35;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg); color: var(--text);
+    padding-bottom: 90px;
+  }
+  header {
+    background: var(--green); color: #fff;
+    padding: 16px; text-align: center;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 1.15em; }
+  header p { font-size: .78em; opacity: .9; margin-top: 2px; }
+  main { max-width: 560px; margin: 0 auto; padding: 12px; }
+  .card {
+    background: var(--card); border-radius: 12px;
+    padding: 14px; margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card h2 {
+    font-size: .95em; margin-bottom: 10px;
+    padding-left: 8px; border-left: 4px solid var(--green);
+  }
+  label { display: block; font-size: .82em; color: var(--muted); margin: 10px 0 4px; }
+  label .req { color: #e33; font-size: .9em; margin-left: 4px; }
+  input[type=text], textarea {
+    width: 100%; padding: 11px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fafafa;
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--green); background: #fff; }
+  .hint { font-size: .72em; color: var(--muted); margin-top: 3px; }
+
+  /* 商品リスト */
+  .product {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 2px; border-bottom: 1px solid var(--line);
+  }
+  .product:last-child { border-bottom: none; }
+  .p-info { flex: 1; min-width: 0; }
+  .p-name { font-size: .92em; font-weight: 600; }
+  .p-price { font-size: .85em; color: var(--accent); font-weight: 700; margin-top: 2px; }
+  .p-price small { color: var(--muted); font-weight: 400; }
+  .stepper { display: flex; align-items: center; gap: 0; }
+  .stepper button {
+    width: 38px; height: 38px; font-size: 1.3em; line-height: 1;
+    border: 1px solid var(--line); background: #fff; color: var(--green);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .stepper button:active { background: #e8f8ee; }
+  .stepper .minus { border-radius: 8px 0 0 8px; }
+  .stepper .plus  { border-radius: 0 8px 8px 0; }
+  .stepper input {
+    width: 44px; height: 38px; text-align: center; font-size: 16px;
+    border: 1px solid var(--line); border-left: none; border-right: none;
+  }
+  .product.selected { background: #f0fbf4; border-radius: 8px; }
+
+  /* 自由入力商品 */
+  .custom-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .custom-row input.c-name { flex: 1; }
+  .custom-row input.c-qty { width: 64px; text-align: center; }
+  .custom-row .c-del {
+    border: none; background: none; color: #c33; font-size: 1.2em; padding: 6px; cursor: pointer;
+  }
+  .add-btn {
+    width: 100%; padding: 10px; font-size: .85em;
+    border: 1px dashed var(--green); color: var(--green);
+    background: #fff; border-radius: 8px; cursor: pointer;
+  }
+
+  /* フッター合計バー */
+  .footer {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+    background: #fff; border-top: 1px solid var(--line);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 12px;
+    max-width: 100%;
+  }
+  .footer .total { flex: 1; }
+  .footer .total .t-label { font-size: .7em; color: var(--muted); }
+  .footer .total .t-value { font-size: 1.25em; font-weight: 700; color: var(--accent); }
+  .footer .total .t-note { font-size: .65em; color: var(--muted); }
+  .submit-btn {
+    background: var(--green); color: #fff; border: none;
+    padding: 13px 28px; font-size: 1em; font-weight: 700;
+    border-radius: 999px; cursor: pointer;
+  }
+  .submit-btn:active { background: var(--green-dark); }
+  .submit-btn:disabled { background: #bbb; }
+
+  /* 確認モーダル */
+  .overlay {
+    display: none; position: fixed; inset: 0; z-index: 30;
+    background: rgba(0,0,0,.5); padding: 20px;
+    align-items: center; justify-content: center;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 18px;
+    width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto;
+  }
+  .modal h3 { font-size: 1em; margin-bottom: 12px; text-align: center; }
+  .confirm-table { width: 100%; font-size: .85em; border-collapse: collapse; }
+  .confirm-table td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  .confirm-table td:last-child { text-align: right; white-space: nowrap; }
+  .modal .btns { display: flex; gap: 10px; margin-top: 16px; }
+  .modal .btns button { flex: 1; padding: 12px; border-radius: 999px; font-size: .95em; cursor: pointer; }
+  .btn-back { border: 1px solid var(--line); background: #fff; }
+  .btn-ok { border: none; background: var(--green); color: #fff; font-weight: 700; }
+
+  /* 完了画面 */
+  #donePage { display: none; }
+  .done-icon { text-align: center; font-size: 3em; margin: 18px 0 6px; }
+  .done-title { text-align: center; font-size: 1.1em; font-weight: 700; margin-bottom: 4px; }
+  .done-sub { text-align: center; font-size: .8em; color: var(--muted); margin-bottom: 14px; }
+  .order-id-badge {
+    text-align: center; background: #e8f8ee; color: var(--green-dark);
+    font-weight: 700; padding: 10px; border-radius: 8px; margin-bottom: 12px;
+    font-size: 1.05em; letter-spacing: .5px;
+  }
+  .pay-box { background: #fff8f0; border: 1px solid #ffdcbf; border-radius: 10px; padding: 12px; font-size: .88em; }
+  .pay-box h3 { font-size: .9em; margin-bottom: 8px; color: var(--accent); }
+  .pay-box dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  .pay-box dt { color: var(--muted); font-size: .85em; }
+  .pay-box dd { font-weight: 600; word-break: break-all; }
+  .copy-btn {
+    width: 100%; margin-top: 14px; padding: 13px;
+    background: #fff; color: var(--green); border: 2px solid var(--green);
+    border-radius: 999px; font-size: .95em; font-weight: 700; cursor: pointer;
+  }
+  .copy-btn.copied { background: var(--green); color: #fff; }
+
+  .loading { text-align: center; padding: 40px 0; color: var(--muted); font-size: .85em; }
+  .spinner {
+    width: 28px; height: 28px; margin: 0 auto 10px;
+    border: 3px solid var(--line); border-top-color: var(--green);
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg {
+    display: none; background: #fdecea; color: #b3261e;
+    padding: 10px 14px; border-radius: 8px; font-size: .85em; margin-bottom: 10px;
+  }
+  .staff-badge {
+    background: #fff3cd; color: #7a5d00; font-size: .75em;
+    padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; text-align: center;
+  }
+</style>
+
+<header>
+  <h1>ご注文フォーム</h1>
+  <p>商品と数量を選んで送信してください</p>
+</header>
+
+<main>
+  <!-- ===== 入力ページ ===== -->
+  <div id="formPage">
+    <? if (isAdminEntry) { ?>
+      <div class="staff-badge">管理者代理入力モードで開いています</div>
+    <? } ?>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="card">
+      <h2>お客様情報</h2>
+      <label>LINEオープンチャットの名前<span class="req">必須</span></label>
+      <input type="text" id="openChatName" placeholder="オープンチャットで表示される名前" maxlength="50">
+      <div class="hint">梱包・お渡しの照合に使います。オープンチャット内の表示名をそのままご入力ください。</div>
+
+      <label>LINEアカウントの名前</label>
+      <input type="text" id="lineName" placeholder="LINEの友だち表示名(わかる場合)" maxlength="50">
+      <div class="hint">個別トークをしている場合はご入力いただけると確認がスムーズです。</div>
+    </div>
+
+    <div class="card">
+      <h2>商品を選ぶ</h2>
+      <div id="productList">
+        <div class="loading"><div class="spinner"></div>商品を読み込んでいます…</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>リストにない商品(自由入力)</h2>
+      <div class="hint" style="margin-bottom:8px;">リストにない商品はこちらへ。価格は後ほどご案内します。</div>
+      <div id="customList"></div>
+      <button type="button" class="add-btn" onclick="addCustomRow()">＋ 商品を追加</button>
+    </div>
+
+    <div class="card">
+      <h2>備考</h2>
+      <textarea id="note" rows="2" placeholder="ご要望などあればご記入ください" maxlength="300"></textarea>
+    </div>
+  </div>
+
+  <!-- ===== 完了ページ ===== -->
+  <div id="donePage">
+    <div class="done-icon">✅</div>
+    <div class="done-title">ご注文を受け付けました</div>
+    <div class="done-sub">お手数ですが、下記口座へお振込をお願いします</div>
+    <div class="order-id-badge">注文番号 <span id="doneOrderId"></span></div>
+
+    <div class="card">
+      <h2>ご注文内容</h2>
+      <table class="confirm-table" id="doneItems"></table>
+    </div>
+
+    <div class="pay-box">
+      <h3>お振込先(台湾郵便局)</h3>
+      <dl id="payInfo"></dl>
+      <div class="hint" id="payNote" style="margin-top:8px;"></div>
+    </div>
+
+    <button type="button" class="copy-btn" id="copyBtn" onclick="copySummary()">
+      📋 注文内容をコピー(LINEに貼り付け用)
+    </button>
+    <div class="hint" style="text-align:center;margin-top:8px;">
+      コピーしてオープンチャットまたはトークに貼り付けると、注文確認がスムーズです。
+    </div>
+  </div>
+</main>
+
+<!-- フッター合計バー -->
+<div class="footer" id="footerBar">
+  <div class="total">
+    <div class="t-label">合計金額</div>
+    <div class="t-value"><span id="totalValue">0</span> 元</div>
+    <div class="t-note" id="totalNote"></div>
+  </div>
+  <button type="button" class="submit-btn" id="submitBtn" onclick="openConfirm()">注文へ進む</button>
+</div>
+
+<!-- 確認モーダル -->
+<div class="overlay" id="confirmOverlay">
+  <div class="modal">
+    <h3>ご注文内容の確認</h3>
+    <table class="confirm-table" id="confirmTable"></table>
+    <div class="btns">
+      <button type="button" class="btn-back" onclick="closeConfirm()">戻る</button>
+      <button type="button" class="btn-ok" id="confirmOkBtn" onclick="doSubmit()">注文を確定する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var PRODUCTS = [];
+  var PAYMENT = null;
+  var IS_ADMIN_ENTRY = ('<?= isAdminEntry ?>' === 'true');
+  var lastResult = null;
+
+  // ---- 初期化 ----
+  google.script.run
+    .withSuccessHandler(function (init) {
+      PRODUCTS = init.products || [];
+      PAYMENT = init.payment || {};
+      renderProducts();
+    })
+    .withFailureHandler(function (err) {
+      document.getElementById('productList').innerHTML =
+        '<div class="loading">商品の読み込みに失敗しました。<br>' + escapeHtml(err.message) + '</div>';
+    })
+    .getFormInit();
+
+  function renderProducts() {
+    var box = document.getElementById('productList');
+    if (PRODUCTS.length === 0) {
+      box.innerHTML = '<div class="loading">現在ご注文いただける商品がありません。<br>下の自由入力欄をご利用ください。</div>';
+      return;
+    }
+    box.innerHTML = PRODUCTS.map(function (p, i) {
+      var priceHtml = p.price === ''
+        ? '<span class="p-price"><small>価格はお問い合わせください</small></span>'
+        : '<span class="p-price">' + p.price + ' 元 <small>/ 1点</small></span>';
+      return '<div class="product" id="prod-' + i + '">' +
+        '<div class="p-info"><div class="p-name">' + escapeHtml(p.name) + '</div>' + priceHtml + '</div>' +
+        '<div class="stepper">' +
+          '<button type="button" class="minus" onclick="step(' + i + ',-1)">−</button>' +
+          '<input type="tel" id="qty-' + i + '" value="0" oninput="onQtyInput(' + i + ')">' +
+          '<button type="button" class="plus" onclick="step(' + i + ',1)">＋</button>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  function step(i, delta) {
+    var input = document.getElementById('qty-' + i);
+    var v = Math.max(0, (parseInt(input.value, 10) || 0) + delta);
+    input.value = v;
+    onQtyInput(i);
+  }
+
+  function onQtyInput(i) {
+    var input = document.getElementById('qty-' + i);
+    var v = parseInt(input.value, 10);
+    if (isNaN(v) || v < 0) v = 0;
+    if (v > 999) v = 999;
+    if (String(v) !== input.value) input.value = v;
+    document.getElementById('prod-' + i).classList.toggle('selected', v > 0);
+    updateTotal();
+  }
+
+  // ---- 自由入力商品 ----
+  var customSeq = 0;
+  function addCustomRow() {
+    var id = 'custom-' + (customSeq++);
+    var div = document.createElement('div');
+    div.className = 'custom-row';
+    div.id = id;
+    div.innerHTML =
+      '<input type="text" class="c-name" placeholder="商品名" maxlength="60">' +
+      '<input type="tel" class="c-qty" value="1" oninput="updateTotal()">' +
+      '<button type="button" class="c-del" onclick="removeCustomRow(\'' + id + '\')">✕</button>';
+    document.getElementById('customList').appendChild(div);
+  }
+  function removeCustomRow(id) {
+    var el = document.getElementById(id);
+    if (el) el.remove();
+    updateTotal();
+  }
+
+  // ---- 合計計算 ----
+  function collectItems() {
+    var items = [];
+    PRODUCTS.forEach(function (p, i) {
+      var qty = parseInt(document.getElementById('qty-' + i).value, 10) || 0;
+      if (qty > 0) items.push({ productId: p.id, name: p.name, price: p.price, qty: qty });
+    });
+    document.querySelectorAll('.custom-row').forEach(function (row) {
+      var name = row.querySelector('.c-name').value.trim();
+      var qty = parseInt(row.querySelector('.c-qty').value, 10) || 0;
+      if (name && qty > 0) items.push({ productId: '', name: name, price: '', qty: qty });
+    });
+    return items;
+  }
+
+  function updateTotal() {
+    var items = collectItems();
+    var total = 0, hasCustom = false, hasNoPrice = false;
+    items.forEach(function (it) {
+      if (it.price === '') {
+        if (it.productId) hasNoPrice = true; else hasCustom = true;
+      } else {
+        total += it.price * it.qty;
+      }
+    });
+    document.getElementById('totalValue').textContent = total.toLocaleString();
+    document.getElementById('totalNote').textContent =
+      (hasCustom || hasNoPrice) ? '※価格未定の商品は含まれていません' : '';
+  }
+
+  // ---- 確認 → 送信 ----
+  function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function openConfirm() {
+    document.getElementById('errorMsg').style.display = 'none';
+    var name = document.getElementById('openChatName').value.trim();
+    if (!name) { showError('オープンチャットの名前を入力してください。'); return; }
+    var items = collectItems();
+    if (items.length === 0) { showError('商品を1つ以上選択してください。'); return; }
+
+    var rows = '<tr><td>お名前</td><td>' + escapeHtml(name) + '</td></tr>';
+    var total = 0, hasCustom = false;
+    items.forEach(function (it) {
+      var priceText;
+      if (it.price === '') { priceText = '価格未定'; hasCustom = true; }
+      else { var sub = it.price * it.qty; total += sub; priceText = sub.toLocaleString() + ' 元'; }
+      rows += '<tr><td>' + escapeHtml(it.name) + ' × ' + it.qty + '</td><td>' + priceText + '</td></tr>';
+    });
+    rows += '<tr><td style="font-weight:700;">合計</td><td style="font-weight:700;color:var(--accent);">' +
+      total.toLocaleString() + ' 元' + (hasCustom ? ' ＋α' : '') + '</td></tr>';
+    document.getElementById('confirmTable').innerHTML = rows;
+    document.getElementById('confirmOverlay').classList.add('show');
+  }
+
+  function closeConfirm() {
+    document.getElementById('confirmOverlay').classList.remove('show');
+  }
+
+  function doSubmit() {
+    var btn = document.getElementById('confirmOkBtn');
+    btn.disabled = true;
+    btn.textContent = '送信中…';
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        lastResult = result;
+        closeConfirm();
+        showDone(result);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = '注文を確定する';
+        closeConfirm();
+        showError('送信に失敗しました: ' + err.message + '\nもう一度お試しください。');
+      })
+      .submitOrder({
+        openChatName: document.getElementById('openChatName').value.trim(),
+        lineName: document.getElementById('lineName').value.trim(),
+        note: document.getElementById('note').value.trim(),
+        enteredBy: IS_ADMIN_ENTRY ? '管理者' : 'お客様',
+        items: collectItems()
+      });
+  }
+
+  // ---- 完了画面 ----
+  function showDone(result) {
+    document.getElementById('formPage').style.display = 'none';
+    document.getElementById('footerBar').style.display = 'none';
+    document.getElementById('donePage').style.display = 'block';
+    document.getElementById('doneOrderId').textContent = result.orderId;
+
+    var rows = '';
+    result.items.forEach(function (it) {
+      var priceText = it.subtotal === '' ? '価格未定' : it.subtotal.toLocaleString() + ' 元';
+      rows += '<tr><td>' + escapeHtml(it.name) + ' × ' + it.qty + '</td><td>' + priceText + '</td></tr>';
+    });
+    rows += '<tr><td style="font-weight:700;">合計</td><td style="font-weight:700;color:var(--accent);">' +
+      result.total.toLocaleString() + ' 元' + (result.hasCustomItems ? ' ＋α' : '') + '</td></tr>';
+    document.getElementById('doneItems').innerHTML = rows;
+
+    var pay = result.payment;
+    var dl = '';
+    dl += '<dt>銀行</dt><dd>' + escapeHtml(pay.bankName) + '</dd>';
+    if (pay.bankCode) dl += '<dt>郵局代号</dt><dd>' + escapeHtml(pay.bankCode) + '</dd>';
+    if (pay.accountNumber) dl += '<dt>口座番号</dt><dd>' + escapeHtml(pay.accountNumber) + '</dd>';
+    if (pay.accountName) dl += '<dt>口座名義</dt><dd>' + escapeHtml(pay.accountName) + '</dd>';
+    document.getElementById('payInfo').innerHTML = dl;
+    document.getElementById('payNote').textContent = pay.paymentNote || '';
+    window.scrollTo(0, 0);
+  }
+
+  function copySummary() {
+    if (!lastResult) return;
+    var r = lastResult;
+    var lines = ['【注文しました】', '注文番号: ' + r.orderId,
+      'お名前: ' + document.getElementById('openChatName').value.trim(), ''];
+    r.items.forEach(function (it) {
+      lines.push('・' + it.name + ' × ' + it.qty +
+        (it.subtotal === '' ? '(価格未定)' : '(' + it.subtotal + '元)'));
+    });
+    lines.push('');
+    lines.push('合計: ' + r.total + '元' + (r.hasCustomItems ? ' ＋価格未定分' : ''));
+    var text = lines.join('\n');
+
+    var done = function () {
+      var btn = document.getElementById('copyBtn');
+      btn.textContent = '✅ コピーしました!';
+      btn.classList.add('copied');
+      setTimeout(function () {
+        btn.textContent = '📋 注文内容をコピー(LINEに貼り付け用)';
+        btn.classList.remove('copied');
+      }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+</script>
