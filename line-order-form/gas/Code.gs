@@ -12,10 +12,11 @@
  */
 
 // ===== 定数 =====
-var SHEET_PRODUCTS = '商品マスター';
-var SHEET_ORDERS   = '注文一覧';
-var SHEET_SETTINGS = '設定';
-var SHEET_SHIPPING = '送料マスター';
+var SHEET_PRODUCTS  = '商品マスター';
+var SHEET_ORDERS    = '注文一覧';
+var SHEET_SETTINGS  = '設定';
+var SHEET_SHIPPING  = '送料マスター';
+var SHEET_CUSTOMERS = '顧客マスター';
 var TIMEZONE       = 'Asia/Taipei';
 
 // フロー: 承認待ち →(管理者承認・在庫引落)→ 注文確定 →(商品代入金)→ 入金確認済
@@ -75,6 +76,8 @@ function doGet(e) {
   var isAdminEntry = page === 'staff' && isValidAdminKey_(e.parameter.key || '');
   var formTmpl = HtmlService.createTemplateFromFile('Form');
   formTmpl.isAdminEntry = isAdminEntry;
+  // 顧客No読み込み用。管理者キー検証済みの代理入力モードのみ渡す
+  formTmpl.adminKey = isAdminEntry ? String(e.parameter.key || '') : '';
   return formTmpl.evaluate()
     .setTitle('ご注文フォーム')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -213,6 +216,15 @@ function submitOrder(data) {
     lock.releaseLock();
   }
 
+  // 顧客マスターへ自動登録・更新(顧客Noを自動採番)
+  upsertCustomer_({
+    openChatName: data.openChatName,
+    lineName: data.lineName,
+    recvName: data.recvName,
+    recvAddress: data.recvAddress,
+    recvPhone: data.recvPhone
+  });
+
   notifyNewOrder_(orderId, orderedAt, data, items, total, hasCustomItems);
 
   return {
@@ -236,6 +248,7 @@ function getAdminData(key) {
     shippingRates: getShippingRates_(),
     payment: getPaymentInfo_(),
     statusUrl: ScriptApp.getService().getUrl() + '?page=status',
+    customers: readCustomers_(),
     orders: readOrders_().reverse() // 新しい順
   };
 }
@@ -280,6 +293,18 @@ function saveShipping(key, orderId, info, markAsShipped) {
     newStatus = '発送済';
   }
   setOrderFields_(orderId, fields, newStatus);
+
+  // お届け先情報を顧客マスターにも反映(次回の代理入力で使えるように)
+  var order = findOrder_(orderId);
+  if (order) {
+    upsertCustomer_({
+      openChatName: order.openChatName,
+      lineName: order.lineName,
+      recvName: info.recvName,
+      recvAddress: info.recvAddress,
+      recvPhone: info.recvPhone
+    });
+  }
   return { orderId: orderId, shipped: !!markAsShipped, shippedDate: fields[COL_SHIPDATE] || '' };
 }
 
@@ -383,6 +408,7 @@ function updateOrder(key, orderId, data) {
     lock.releaseLock();
   }
 
+  upsertCustomer_({ openChatName: data.openChatName, lineName: data.lineName });
   return { orderId: orderId, total: total };
 }
 
@@ -539,6 +565,132 @@ function getActiveProducts_() {
   });
   products.sort(function (a, b) { return a.sortOrder - b.sortOrder; });
   return products;
+}
+
+// ===== 顧客マスター =====
+
+/** 顧客マスターシートを取得する(なければヘッダー付きで自動作成)。 */
+function ensureCustomerSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_CUSTOMERS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_CUSTOMERS);
+    sheet.getRange(1, 1, 1, 9).setValues([[
+      '顧客No', 'オープンチャット名', 'LINEアカウント名',
+      'お届け先氏名', 'お届け先住所', 'お届け先電話',
+      '初回注文日', '最終注文日', 'メモ'
+    ]]).setFontWeight('bold').setBackground('#ead1dc');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/** 顧客マスターの全行を返す。 */
+function readCustomers_() {
+  var sheet = ensureCustomerSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  var list = [];
+  values.forEach(function (r, i) {
+    var no = String(r[0]).trim();
+    var name = String(r[1]).trim();
+    if (!no || !name) return;
+    list.push({
+      row: i + 2,
+      custNo: no,
+      openChatName: name,
+      lineName: String(r[2] || ''),
+      recvName: String(r[3] || ''),
+      recvAddress: String(r[4] || ''),
+      recvPhone: String(r[5] || ''),
+      firstOrderAt: r[6] instanceof Date ? Utilities.formatDate(r[6], TIMEZONE, 'yyyy/MM/dd') : String(r[6] || ''),
+      lastOrderAt: r[7] instanceof Date ? Utilities.formatDate(r[7], TIMEZONE, 'yyyy/MM/dd') : String(r[7] || '')
+    });
+  });
+  return list;
+}
+
+/**
+ * 注文情報から顧客マスターを自動登録・更新する(オープンチャット名で照合)。
+ * 新規なら顧客Noを自動採番。既存なら空欄でない項目だけ上書きし最終注文日を更新。
+ * 顧客マスターの不具合で注文自体を失敗させないよう、エラーは握りつぶしてログに残す。
+ */
+function upsertCustomer_(info) {
+  try {
+    var name = String(info.openChatName || '').trim();
+    if (!name) return;
+    var lock = LockService.getScriptLock();
+    lock.waitLock(10 * 1000);
+    try {
+      var sheet = ensureCustomerSheet_();
+      var today = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd');
+      var customers = readCustomers_();
+      var hit = null;
+      customers.forEach(function (c) {
+        if (c.openChatName === name) hit = c;
+      });
+
+      if (hit) {
+        var updates = { 3: info.lineName, 4: info.recvName, 5: info.recvAddress, 6: info.recvPhone };
+        for (var col in updates) {
+          var v = String(updates[col] || '').trim();
+          if (v) sheet.getRange(hit.row, Number(col)).setValue(v);
+        }
+        sheet.getRange(hit.row, 8).setValue(today); // 最終注文日
+      } else {
+        // 既存の最大番号+1で採番(C001形式)
+        var maxNo = 0;
+        customers.forEach(function (c) {
+          var m = c.custNo.toUpperCase().match(/^C(\d+)$/);
+          if (m && Number(m[1]) > maxNo) maxNo = Number(m[1]);
+        });
+        var next = String(maxNo + 1);
+        var custNo = 'C' + (next.length >= 3 ? next : ('00' + next).slice(-3));
+        sheet.appendRow([
+          custNo, name,
+          String(info.lineName || '').trim(),
+          String(info.recvName || '').trim(),
+          String(info.recvAddress || '').trim(),
+          String(info.recvPhone || '').trim(),
+          today, today, ''
+        ]);
+      }
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (err) {
+    console.error('顧客マスター更新エラー: ' + err);
+  }
+}
+
+/**
+ * 管理者専用: 顧客Noで顧客情報を読み出す(代理入力フォーム用)。
+ * 暗号キー(管理者キー)がなければ一切返さない — 個人情報保護のため。
+ */
+function getCustomer(key, custNo) {
+  requireAdmin_(key);
+  var no = String(custNo || '').trim().toUpperCase();
+  if (/^\d+$/.test(no)) {
+    no = 'C' + (no.length >= 3 ? no : ('00' + no).slice(-3)); // 「12」→「C012」も許容
+  }
+  if (!no) throw new Error('顧客Noを入力してください。');
+
+  var customers = readCustomers_();
+  for (var i = 0; i < customers.length; i++) {
+    if (customers[i].custNo.toUpperCase() === no) {
+      var c = customers[i];
+      return {
+        custNo: c.custNo,
+        openChatName: c.openChatName,
+        lineName: c.lineName,
+        recvName: c.recvName,
+        recvAddress: c.recvAddress,
+        recvPhone: c.recvPhone
+      };
+    }
+  }
+  throw new Error('顧客No「' + no + '」が見つかりません。管理者ページの「顧客」タブで番号をご確認ください。');
 }
 
 /** 商品マスターの全行を行番号付きで返す(在庫更新用)。 */
@@ -791,6 +943,8 @@ function setupSheets() {
   // ステータス列に入力規則(プルダウン)を設定(ステータス追加にも対応して毎回更新)
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUSES, true).build();
   o.getRange(2, COL_STATUS, o.getMaxRows() - 1, 1).setDataValidation(rule);
+
+  ensureCustomerSheet_();
 
   if (!ss.getSheetByName(SHEET_SHIPPING)) {
     var sh = ss.insertSheet(SHEET_SHIPPING);

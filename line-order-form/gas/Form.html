@@ -164,6 +164,18 @@
     background: #fff3cd; color: #7a5d00; font-size: .75em;
     padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; text-align: center;
   }
+  .cust-lookup {
+    display: flex; gap: 8px; margin-bottom: 4px;
+  }
+  .cust-lookup input {
+    flex: 1; padding: 10px; font-size: 16px;
+    border: 1px solid #f2b90a; border-radius: 8px; background: #fffdf5;
+  }
+  .cust-lookup button {
+    padding: 10px 16px; font-size: .85em; font-weight: 700; white-space: nowrap;
+    border: none; border-radius: 8px; background: #f2b90a; color: #5b4500; cursor: pointer;
+  }
+  .cust-lookup button:disabled { opacity: .5; }
 </style>
 
 <header>
@@ -182,6 +194,15 @@
 
     <div class="card">
       <h2>お客様情報</h2>
+      <? if (isAdminEntry) { ?>
+      <div class="cust-lookup">
+        <input type="text" id="custNo" placeholder="顧客No(例: C001)">
+        <button type="button" id="custLoadBtn" onclick="loadCustomer()">📇 読み込み</button>
+      </div>
+      <div class="hint" style="margin-bottom:10px;">
+        過去に注文のあるお客様は顧客Noで情報を呼び出せます(番号は管理者ページの「顧客」タブで確認)。
+      </div>
+      <? } ?>
       <label>LINEオープンチャットの名前<span class="req">必須</span></label>
       <input type="text" id="openChatName" placeholder="オープンチャットで表示される名前" maxlength="50">
       <div class="hint">梱包・お渡しの照合に使います。オープンチャット内の表示名をそのままご入力ください。</div>
@@ -287,7 +308,35 @@
   var PAYMENT = null;
   var STATUS_URL = '';
   var IS_ADMIN_ENTRY = ('<?= isAdminEntry ?>' === 'true');
+  var ADMIN_KEY = '<?= adminKey ?>'; // 代理入力モードのみ値が入る
   var lastResult = null;
+
+  // 管理者専用: 顧客Noで顧客情報を読み込んでフォームに反映
+  function loadCustomer() {
+    var no = document.getElementById('custNo').value.trim();
+    if (!no) { showError('顧客Noを入力してください。'); return; }
+    document.getElementById('errorMsg').style.display = 'none';
+    var btn = document.getElementById('custLoadBtn');
+    btn.disabled = true;
+    btn.textContent = '読込中…';
+    google.script.run
+      .withSuccessHandler(function (c) {
+        btn.disabled = false;
+        btn.textContent = '✅ 読込完了';
+        setTimeout(function () { btn.textContent = '📇 読み込み'; }, 2000);
+        document.getElementById('openChatName').value = c.openChatName || '';
+        document.getElementById('lineName').value = c.lineName || '';
+        document.getElementById('recvName').value = c.recvName || '';
+        document.getElementById('recvAddress').value = c.recvAddress || '';
+        document.getElementById('recvPhone').value = c.recvPhone || '';
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = '📇 読み込み';
+        showError(err.message);
+      })
+      .getCustomer(ADMIN_KEY, no);
+  }
 
   // ---- 初期化 ----
   google.script.run

@@ -256,6 +256,7 @@
   <div class="tab active" data-tab="orders" onclick="switchTab('orders')">注文一覧</div>
   <div class="tab" data-tab="packing" onclick="switchTab('packing')">梱包</div>
   <div class="tab" data-tab="shipping" onclick="switchTab('shipping')">発送</div>
+  <div class="tab" data-tab="customers" onclick="switchTab('customers')">顧客</div>
   <div class="tab" data-tab="summary" onclick="switchTab('summary')">集計</div>
 </div>
 
@@ -298,6 +299,18 @@
 
     <div class="ship-section-title">📮 発送済</div>
     <div id="shippedList"></div>
+  </div>
+
+  <div id="tab-customers" style="display:none;">
+    <p style="font-size:.78em;color:var(--muted);margin-bottom:10px;">
+      注文したお客様は自動でここに登録され、顧客Noが割り振られます。
+      代理入力フォームでこの顧客Noを入力すると、お客様情報を呼び出せます。
+      住所などの修正はスプレッドシートの「顧客マスター」シートで直接編集できます。
+    </p>
+    <div class="filters">
+      <input type="text" id="custSearchBox" placeholder="顧客No・名前で検索" oninput="renderCustomers()">
+    </div>
+    <div id="customersList"></div>
   </div>
 
   <div id="tab-summary" style="display:none;">
@@ -368,6 +381,7 @@
     renderOrders();
     renderPacking();
     renderShipping();
+    renderCustomers();
     renderSummary();
   }
 
@@ -375,7 +389,7 @@
     document.querySelectorAll('.tab').forEach(function (t) {
       t.classList.toggle('active', t.dataset.tab === name);
     });
-    ['orders', 'packing', 'shipping', 'summary'].forEach(function (t) {
+    ['orders', 'packing', 'shipping', 'customers', 'summary'].forEach(function (t) {
       document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
     });
   }
@@ -421,7 +435,10 @@
         '<div class="oc-head"><div>' +
           '<div class="oc-id">' + escapeHtml(o.orderId) + ' ・ ' + escapeHtml(o.orderedAt) +
             (o.enteredBy === '管理者' ? '<span class="badge admin">管理者入力</span>' : '') + '</div>' +
-          '<div class="oc-name">' + escapeHtml(o.openChatName) + '</div>' +
+          '<div class="oc-name">' + escapeHtml(o.openChatName) +
+            (custNoOf(o.openChatName)
+              ? '<span class="badge" style="background:#ead1dc;color:#7a3b5e;font-weight:700;">' + escapeHtml(custNoOf(o.openChatName)) + '</span>'
+              : '') + '</div>' +
           (o.lineName ? '<div class="oc-line">LINE: ' + escapeHtml(o.lineName) + '</div>' : '') +
         '</div>' +
         '<select class="status-select st-' + o.status + '" onchange="changeStatus(\'' + o.orderId + '\', this)">' +
@@ -819,6 +836,48 @@
     ta.select();
     try { document.execCommand('copy'); done(); } catch (e) {}
     document.body.removeChild(ta);
+  }
+
+  // ---- 顧客一覧 ----
+  function custNoOf(openChatName) {
+    var c = (DATA.customers || []).find(function (x) { return x.openChatName === openChatName; });
+    return c ? c.custNo : '';
+  }
+
+  function renderCustomers() {
+    var q = (document.getElementById('custSearchBox').value || '').trim().toLowerCase();
+    var list = (DATA.customers || []).filter(function (c) {
+      if (!q) return true;
+      return (c.custNo + c.openChatName + c.lineName).toLowerCase().indexOf(q) !== -1;
+    });
+    var box = document.getElementById('customersList');
+    if (list.length === 0) {
+      box.innerHTML = '<div class="empty">顧客がいません(注文が入ると自動で登録されます)</div>';
+      return;
+    }
+    // 注文回数をオープンチャット名ごとに数える
+    var orderCount = {};
+    (DATA.orders || []).forEach(function (o) {
+      if (o.status === 'キャンセル') return;
+      orderCount[o.openChatName] = (orderCount[o.openChatName] || 0) + 1;
+    });
+    box.innerHTML = list.map(function (c) {
+      return '<div class="order-card">' +
+        '<div class="oc-head"><div>' +
+          '<div class="oc-name">' + escapeHtml(c.openChatName) +
+            '<span class="badge" style="background:#ead1dc;color:#7a3b5e;font-weight:700;">' + escapeHtml(c.custNo) + '</span></div>' +
+          (c.lineName ? '<div class="oc-line">LINE: ' + escapeHtml(c.lineName) + '</div>' : '') +
+        '</div>' +
+        '<div style="font-size:.75em;color:var(--muted);text-align:right;">注文 ' +
+          (orderCount[c.openChatName] || 0) + '回<br>' +
+          (c.lastOrderAt ? '最終 ' + escapeHtml(c.lastOrderAt) : '') + '</div></div>' +
+        '<div class="ship-meta" style="color:var(--muted);">' +
+          (c.recvName ? '📮 ' + escapeHtml(c.recvName) + ' / ' : '') +
+          (c.recvAddress ? escapeHtml(c.recvAddress) : '(お届け先未登録)') +
+          (c.recvPhone ? ' / ' + escapeHtml(c.recvPhone) : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
   }
 
   // ---- 商品集計 ----
