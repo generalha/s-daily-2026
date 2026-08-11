@@ -1,0 +1,287 @@
+<style>
+  :root {
+    --green: #06c755; --green-dark: #05a648;
+    --bg: #f4f6f5; --card: #fff; --text: #222; --muted: #777;
+    --line: #e3e6e4; --accent: #ff6b35;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg); color: var(--text); padding-bottom: 40px;
+  }
+  header {
+    background: var(--green); color: #fff; padding: 16px; text-align: center;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 1.15em; }
+  header p { font-size: .78em; opacity: .9; margin-top: 2px; }
+  main { max-width: 560px; margin: 0 auto; padding: 12px; }
+  .card {
+    background: var(--card); border-radius: 12px; padding: 14px;
+    margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card h2 {
+    font-size: .95em; margin-bottom: 10px;
+    padding-left: 8px; border-left: 4px solid var(--green);
+  }
+  label { display: block; font-size: .82em; color: var(--muted); margin: 10px 0 4px; }
+  input[type=text] {
+    width: 100%; padding: 11px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fafafa;
+  }
+  input:focus { outline: 2px solid var(--green); background: #fff; }
+  .hint { font-size: .72em; color: var(--muted); margin-top: 3px; }
+  .check-btn {
+    width: 100%; margin-top: 14px; padding: 13px;
+    background: var(--green); color: #fff; border: none;
+    border-radius: 999px; font-size: 1em; font-weight: 700; cursor: pointer;
+  }
+  .check-btn:active { background: var(--green-dark); }
+  .check-btn:disabled { background: #bbb; }
+  .error-msg {
+    display: none; background: #fdecea; color: #b3261e;
+    padding: 10px 14px; border-radius: 8px; font-size: .85em; margin-bottom: 10px;
+  }
+
+  /* 進捗タイムライン */
+  .order-id-badge {
+    text-align: center; background: #e8f8ee; color: var(--green-dark);
+    font-weight: 700; padding: 10px; border-radius: 8px; margin-bottom: 12px;
+    font-size: 1.05em; letter-spacing: .5px;
+  }
+  .cancel-banner {
+    background: #fdecea; color: #b3261e; font-weight: 700; text-align: center;
+    padding: 14px; border-radius: 10px; margin-bottom: 12px;
+  }
+  .timeline { list-style: none; }
+  .timeline li {
+    position: relative; padding: 0 0 22px 40px;
+  }
+  .timeline li:last-child { padding-bottom: 0; }
+  .timeline .t-line {
+    position: absolute; left: 13px; top: 26px; bottom: -2px; width: 3px;
+    background: var(--line); border-radius: 2px;
+  }
+  .timeline li:last-child .t-line { display: none; }
+  .timeline li.done .t-line { background: var(--green); }
+  .timeline .t-dot {
+    position: absolute; left: 0; top: 0;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .8em; color: #bbb; font-weight: 700;
+  }
+  .timeline li.done .t-dot { background: var(--green); border-color: var(--green); color: #fff; }
+  .timeline li.current .t-dot {
+    border-color: var(--green); color: var(--green-dark);
+    box-shadow: 0 0 0 4px rgba(6,199,85,.18);
+  }
+  .timeline .t-label { font-size: .92em; font-weight: 700; color: #bbb; padding-top: 4px; }
+  .timeline li.done .t-label, .timeline li.current .t-label { color: var(--text); }
+  .timeline li.current .t-label { color: var(--green-dark); }
+  .timeline .t-desc {
+    display: none; font-size: .8em; color: var(--text);
+    background: #f0fbf4; border-radius: 8px; padding: 8px 10px; margin-top: 6px;
+  }
+  .timeline li.current .t-desc { display: block; }
+
+  .items-table { width: 100%; font-size: .85em; border-collapse: collapse; }
+  .items-table td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  .items-table td:last-child { text-align: right; white-space: nowrap; }
+  .ship-info { font-size: .85em; margin-top: 8px; }
+  .ship-info b { color: var(--accent); }
+  .pay-box { background: #fff8f0; border: 1px solid #ffdcbf; border-radius: 10px; padding: 12px; font-size: .88em; margin-top: 12px; }
+  .pay-box h3 { font-size: .9em; margin-bottom: 8px; color: var(--accent); }
+  .pay-box dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  .pay-box dt { color: var(--muted); font-size: .85em; }
+  .pay-box dd { font-weight: 600; word-break: break-all; }
+  .track-link {
+    display: block; text-align: center; margin-top: 10px; padding: 11px;
+    border: 2px solid var(--green); color: var(--green-dark); border-radius: 999px;
+    font-size: .9em; font-weight: 700; text-decoration: none;
+  }
+  .loading { text-align: center; padding: 30px 0; color: var(--muted); font-size: .85em; }
+  .spinner {
+    width: 28px; height: 28px; margin: 0 auto 10px;
+    border: 3px solid var(--line); border-top-color: var(--green);
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<header>
+  <h1>📦 注文状況の確認</h1>
+  <p>注文番号とお名前を入力してください</p>
+</header>
+
+<main>
+  <div class="error-msg" id="errorMsg"></div>
+
+  <div class="card">
+    <label>注文番号</label>
+    <input type="text" id="orderId" placeholder="例: 20260811-001" value="<?= prefillOrder ?>">
+    <div class="hint">ご注文完了画面・LINEでお知らせした番号です。</div>
+    <label>LINEオープンチャットの名前</label>
+    <input type="text" id="openChatName" placeholder="注文時に入力したお名前" maxlength="50">
+    <button type="button" class="check-btn" id="checkBtn" onclick="check()">状況を確認する</button>
+  </div>
+
+  <div id="loading" class="loading" style="display:none;">
+    <div class="spinner"></div>確認しています…
+  </div>
+
+  <div id="result" style="display:none;">
+    <div class="order-id-badge">注文番号 <span id="rOrderId"></span></div>
+    <div class="cancel-banner" id="cancelBanner" style="display:none;">
+      この注文はキャンセルされています
+    </div>
+
+    <div class="card" id="progressCard">
+      <h2>現在の状況</h2>
+      <ul class="timeline" id="timeline"></ul>
+    </div>
+
+    <div class="card">
+      <h2>ご注文内容</h2>
+      <div class="hint" id="rOrderedAt" style="margin-bottom:6px;"></div>
+      <table class="items-table" id="rItems"></table>
+      <div class="ship-info" id="rShipInfo"></div>
+      <a class="track-link" id="trackLink" style="display:none;" target="_blank" rel="noopener"></a>
+    </div>
+
+    <div class="pay-box" id="payBox" style="display:none;">
+      <h3 id="payTitle"></h3>
+      <dl id="payInfo"></dl>
+    </div>
+  </div>
+</main>
+
+<script>
+  // ページを開いた時に注文番号が入っていれば名前入力欄にフォーカス
+  if (document.getElementById('orderId').value) {
+    document.getElementById('openChatName').focus();
+  }
+
+  function showError(msg) {
+    var el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function check() {
+    document.getElementById('errorMsg').style.display = 'none';
+    var orderId = document.getElementById('orderId').value.trim();
+    var name = document.getElementById('openChatName').value.trim();
+    if (!orderId || !name) {
+      showError('注文番号とオープンチャットの名前を両方入力してください。');
+      return;
+    }
+    var btn = document.getElementById('checkBtn');
+    btn.disabled = true;
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+
+    google.script.run
+      .withSuccessHandler(function (r) {
+        btn.disabled = false;
+        document.getElementById('loading').style.display = 'none';
+        render(r);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        document.getElementById('loading').style.display = 'none';
+        showError(err.message);
+      })
+      .getOrderStatus(orderId, name);
+  }
+
+  function render(r) {
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('rOrderId').textContent = r.orderId;
+    document.getElementById('rOrderedAt').textContent = 'ご注文日時: ' + r.orderedAt;
+
+    // 進捗タイムライン
+    var cancelBanner = document.getElementById('cancelBanner');
+    var progressCard = document.getElementById('progressCard');
+    if (r.cancelled) {
+      cancelBanner.style.display = 'block';
+      progressCard.style.display = 'none';
+    } else {
+      cancelBanner.style.display = 'none';
+      progressCard.style.display = 'block';
+      var html = '';
+      r.steps.forEach(function (s, i) {
+        var cls = i < r.statusIndex ? 'done' : (i === r.statusIndex ? 'current' : '');
+        var dot = i < r.statusIndex ? '✓' : (i + 1);
+        var desc = s.desc;
+        if (i === 5 && r.trackingNo) desc += ' 追跡番号: ' + r.trackingNo;
+        html += '<li class="' + cls + '">' +
+          '<span class="t-dot">' + dot + '</span><span class="t-line"></span>' +
+          '<div class="t-label">' + escapeHtml(s.label) + '</div>' +
+          '<div class="t-desc">' + escapeHtml(desc) + '</div>' +
+        '</li>';
+      });
+      document.getElementById('timeline').innerHTML = html;
+    }
+
+    // 注文内容
+    var rows = '';
+    r.items.forEach(function (it) {
+      var priceText = it.subtotal === '' ? '価格未定' : it.subtotal.toLocaleString() + ' 元';
+      rows += '<tr><td>' + escapeHtml(it.name) + ' × ' + it.qty + '</td><td>' + priceText + '</td></tr>';
+    });
+    rows += '<tr><td style="font-weight:700;">商品代合計</td><td style="font-weight:700;color:var(--accent);">' +
+      r.total.toLocaleString() + ' 元' + (r.hasCustomItems ? ' ＋α' : '') + '</td></tr>';
+    document.getElementById('rItems').innerHTML = rows;
+
+    // 送料・発送情報
+    var shipHtml = '';
+    if (r.shipMethod) {
+      shipHtml += '🚚 ' + escapeHtml(r.shipMethod) +
+        (r.weightG ? ' / ' + r.weightG + 'g' : '') +
+        (r.shipFee !== '' && r.shipFee !== 0 ? ' / 国際送料 <b>' + Number(r.shipFee).toLocaleString() + ' 元</b>' : '');
+    }
+    if (r.shippedDate) shipHtml += '<br>発送日: ' + escapeHtml(r.shippedDate);
+    document.getElementById('rShipInfo').innerHTML = shipHtml;
+
+    var trackLink = document.getElementById('trackLink');
+    if (r.trackingNo) {
+      trackLink.style.display = 'block';
+      trackLink.textContent = '🔍 配送状況を追跡する(' + r.trackingNo + ')';
+      trackLink.href = 'https://trackings.post.japanpost.jp/services/srv/search/direct?searchKind=S002&locale=ja&reqCodeNo1=' +
+        encodeURIComponent(r.trackingNo);
+    } else {
+      trackLink.style.display = 'none';
+    }
+
+    // 今お振込が必要な場合のみ振込先を表示
+    var payBox = document.getElementById('payBox');
+    var pay = r.payment || {};
+    var needPay = null;
+    if (!r.cancelled && r.statusIndex === 1) {
+      needPay = { title: '商品代のお振込をお願いします(' + r.total.toLocaleString() + '元)' };
+    } else if (!r.cancelled && r.statusIndex === 3 && r.shipFee !== '' && r.shipFee !== 0) {
+      needPay = { title: '国際送料のお振込をお願いします(' + Number(r.shipFee).toLocaleString() + '元)' };
+    }
+    if (needPay) {
+      payBox.style.display = 'block';
+      document.getElementById('payTitle').textContent = needPay.title;
+      var dl = '';
+      dl += '<dt>銀行</dt><dd>' + escapeHtml(pay.bankName) + '</dd>';
+      if (pay.bankCode) dl += '<dt>郵局代号</dt><dd>' + escapeHtml(pay.bankCode) + '</dd>';
+      if (pay.accountNumber) dl += '<dt>口座番号</dt><dd>' + escapeHtml(pay.accountNumber) + '</dd>';
+      if (pay.accountName) dl += '<dt>口座名義</dt><dd>' + escapeHtml(pay.accountName) + '</dd>';
+      document.getElementById('payInfo').innerHTML = dl;
+    } else {
+      payBox.style.display = 'none';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+</script>

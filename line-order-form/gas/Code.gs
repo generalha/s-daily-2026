@@ -64,6 +64,14 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  if (page === 'status') {
+    var st = HtmlService.createTemplateFromFile('Status');
+    st.prefillOrder = String(e.parameter.order || '').replace(/[^0-9\-]/g, '');
+    return st.evaluate()
+      .setTitle('注文状況の確認')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   var isAdminEntry = page === 'staff' && isValidAdminKey_(e.parameter.key || '');
   var formTmpl = HtmlService.createTemplateFromFile('Form');
   formTmpl.isAdminEntry = isAdminEntry;
@@ -71,6 +79,17 @@ function doGet(e) {
     .setTitle('ご注文フォーム')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
+
+// お客様向け進捗ステップ(キャンセルを除くSTATUSESと1対1対応)
+var CUSTOMER_STEPS = [
+  { label: '注文受付', desc: '在庫を確認しています。確定のご連絡をお待ちください。' },
+  { label: '注文確定', desc: 'ご注文が確定しました。商品代のお振込をお願いします。' },
+  { label: '入金確認', desc: '商品代のご入金を確認しました。梱包までお待ちください。' },
+  { label: '梱包完了', desc: '梱包が完了しました。国際送料のご案内をお送りしますので、送料のお振込をお願いします。' },
+  { label: '送料入金確認', desc: '送料のご入金を確認しました。発送の準備をしています。' },
+  { label: '発送済み', desc: '発送しました!お届けまで今しばらくお待ちください。' },
+  { label: '受取完了', desc: 'お受け取りが確認されました。ありがとうございました!' }
+];
 
 // ===== 公開API(google.script.run から呼び出し) =====
 
@@ -80,6 +99,42 @@ function doGet(e) {
 function getFormInit() {
   return {
     products: getActiveProducts_(),
+    payment: getPaymentInfo_(),
+    statusUrl: ScriptApp.getService().getUrl() + '?page=status'
+  };
+}
+
+/**
+ * お客様向け: 注文番号+オープンチャット名で注文の進捗を照会する。
+ * 両方が一致しないと何も返さない(他人の注文は見られない)。
+ */
+function getOrderStatus(orderId, openChatName) {
+  var id = String(orderId || '').trim();
+  var name = String(openChatName || '').trim();
+  if (!id || !name) throw new Error('注文番号とオープンチャット名を入力してください。');
+
+  var order = findOrder_(id);
+  if (!order || order.openChatName.trim() !== name) {
+    throw new Error('注文が見つかりません。注文番号とオープンチャット名(注文時と同じ表記)をご確認ください。');
+  }
+
+  var cancelled = order.status === 'キャンセル';
+  var statusIndex = STATUSES.indexOf(order.status);
+  return {
+    orderId: order.orderId,
+    orderedAt: order.orderedAt,
+    status: order.status,
+    statusIndex: cancelled ? -1 : statusIndex,
+    steps: CUSTOMER_STEPS,
+    cancelled: cancelled,
+    items: order.items,
+    total: order.total,
+    hasCustomItems: order.hasCustomItems,
+    shipMethod: order.shipMethod,
+    shipFee: order.shipFee,
+    weightG: order.weightG,
+    trackingNo: order.trackingNo,
+    shippedDate: order.shippedDate,
     payment: getPaymentInfo_()
   };
 }
@@ -180,6 +235,7 @@ function getAdminData(key) {
     products: getActiveProducts_(),
     shippingRates: getShippingRates_(),
     payment: getPaymentInfo_(),
+    statusUrl: ScriptApp.getService().getUrl() + '?page=status',
     orders: readOrders_().reverse() // 新しい順
   };
 }

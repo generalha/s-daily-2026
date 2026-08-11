@@ -12,12 +12,13 @@ LINEオープンチャット/LINEでの注文受付を、URLひとつで使え�
 ## 0. 貼り付ける3つのファイルを開いておく
 
 プログラムは GitHub というサイトに保存されています。パソコンのブラウザ
-(Chrome推奨)で、次の3つのリンクをそれぞれ**新しいタブ**で開いてください
+(Chrome推奨)で、次の4つのリンクをそれぞれ**新しいタブ**で開いてください
 (GitHubへのログインを求められたら、リポジトリを見られるアカウントでログイン):
 
 - Code.gs: https://github.com/generalha/s-daily-2026/blob/claude/line-order-form-cjgzrk/line-order-form/gas/Code.gs
 - Form.html: https://github.com/generalha/s-daily-2026/blob/claude/line-order-form-cjgzrk/line-order-form/gas/Form.html
 - Admin.html: https://github.com/generalha/s-daily-2026/blob/claude/line-order-form-cjgzrk/line-order-form/gas/Admin.html
+- Status.html: https://github.com/generalha/s-daily-2026/blob/claude/line-order-form-cjgzrk/line-order-form/gas/Status.html
 
 **コピーのしかた**: ページを開くとプログラムの中身が表示されます。
 中身の右上あたりにある**四角が2枚重なったアイコン(Copy raw file)**をクリックすると、
@@ -34,7 +35,7 @@ LINEオープンチャット/LINEでの注文受付を、URLひとつで使え�
    ✅ 新しいタブで「Apps Script」という画面が開き、左側に `コード.gs` という
    ファイル名、右側に `function myFunction() {` のような文字が見えれば成功
 
-## 2. プログラムを貼り付ける(3ファイル)
+## 2. プログラムを貼り付ける(4ファイル)
 
 ### 2-1. Code.gs を貼り付ける
 
@@ -58,8 +59,14 @@ LINEオープンチャット/LINEでの注文受付を、URLひとつで使え�
 2-2と同じ手順で、ファイル名だけ `Admin` にして作成し、
 **Admin.html** の中身を貼り付けて Ctrl+S で保存。
 
-✅ 左側のファイル一覧に `コード.gs` `Form.html` `Admin.html` の3つが
-並んでいれば成功です。
+### 2-4. Status.html を作って貼り付ける
+
+2-2と同じ手順で、ファイル名だけ `Status` にして作成し、
+**Status.html** の中身を貼り付けて Ctrl+S で保存。
+(お客様が注文の進捗を確認するページです)
+
+✅ 左側のファイル一覧に `コード.gs` `Form.html` `Admin.html` `Status.html` の
+4つが並んでいれば成功です。
 
 ## 3. 初期セットアップを実行する
 
@@ -175,15 +182,20 @@ B列(「値」の列)に入力します:
    ✅ このURLがお客様に案内する注文フォームのURLです。
    試しに新しいタブでこのURLを開き、注文フォームが表示されれば成功です
 
-### 発行されるURL(3種類)
+### 発行されるURL(4種類)
 
 コピーしたURLを `https://script.google.com/macros/s/AAA…/exec` とすると:
 
 | 用途 | URL |
 |---|---|
 | お客様用フォーム | `https://script.google.com/macros/s/AAA…/exec` (そのまま) |
+| 注文状況確認ページ(お客様用) | `https://script.google.com/macros/s/AAA…/exec?page=status` |
 | 管理者ページ | `https://script.google.com/macros/s/AAA…/exec?page=admin&key=管理者キー` |
 | 管理者による代理入力フォーム | `https://script.google.com/macros/s/AAA…/exec?page=staff&key=管理者キー` |
+
+状況確認ページは、注文完了画面のボタンや各LINEメッセージに自動でリンクが
+入るので、個別に案内しなくても使えます。オープンチャットのノートに
+フォームURLと一緒に貼っておくとさらに親切です。
 
 **管理者キーの調べ方**: スプレッドシート下部の「設定」タブをクリック →
 「管理者キー」の行のB列にある英数字16文字がキーです。
@@ -268,6 +280,7 @@ URLやキーを知らないお客様が注文番号だけで他人の注文を�
 
 ## 便利機能まとめ
 
+- **注文進捗の見える化**: お客様は状況確認ページで「注文受付→注文確定→入金確認→梱包完了→送料入金確認→発送済み→受取完了」の進捗タイムラインをいつでも確認できる(注文番号+オープンチャット名で照会、他人の注文は見えない)。振込が必要なタイミングでは金額と振込先も表示。管理者ページの注文カードにも進捗バーを表示
 - **在庫管理**: 商品マスターに在庫数を登録すると、フォームに「残り◯点」表示・売り切れ表示・在庫超え注文のブロックが自動で効く
 - **承認フロー**: 注文は「承認待ち」で入り、管理者が承認ボタンを押した時に在庫を検証・確保して「注文確定」に。同時注文で在庫を超えても確定前に検出される
 - **台湾元の自動表示**: 商品マスターに登録済みの商品は、注文時に価格と合計が自動表示

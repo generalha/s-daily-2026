@@ -248,8 +248,14 @@
     <button type="button" class="copy-btn" id="copyBtn" onclick="copySummary()">
       📋 注文内容をコピー(LINEに貼り付け用)
     </button>
+    <a id="statusLink" style="display:block;text-align:center;margin-top:10px;padding:13px;
+      background:#fff;color:var(--green-dark);border:2px solid var(--green);border-radius:999px;
+      font-size:.95em;font-weight:700;text-decoration:none;">
+      📦 注文状況を確認する(進捗表示)
+    </a>
     <div class="hint" style="text-align:center;margin-top:8px;">
-      コピーしてオープンチャットまたはトークに貼り付けると、注文確認がスムーズです。
+      コピーしてオープンチャットまたはトークに貼り付けると、注文確認がスムーズです。<br>
+      状況確認ページはブックマークしておくと、いつでも進捗を見られます。
     </div>
   </div>
 </main>
@@ -279,6 +285,7 @@
 <script>
   var PRODUCTS = [];
   var PAYMENT = null;
+  var STATUS_URL = '';
   var IS_ADMIN_ENTRY = ('<?= isAdminEntry ?>' === 'true');
   var lastResult = null;
 
@@ -287,6 +294,7 @@
     .withSuccessHandler(function (init) {
       PRODUCTS = init.products || [];
       PAYMENT = init.payment || {};
+      STATUS_URL = init.statusUrl || '';
       renderProducts();
     })
     .withFailureHandler(function (err) {
@@ -485,6 +493,13 @@
     if (pay.accountName) dl += '<dt>口座名義</dt><dd>' + escapeHtml(pay.accountName) + '</dd>';
     document.getElementById('payInfo').innerHTML = dl;
     document.getElementById('payNote').textContent = pay.paymentNote || '';
+
+    var statusLink = document.getElementById('statusLink');
+    if (STATUS_URL) {
+      statusLink.href = STATUS_URL + '&order=' + encodeURIComponent(result.orderId);
+    } else {
+      statusLink.style.display = 'none';
+    }
     window.scrollTo(0, 0);
   }
 
@@ -499,6 +514,11 @@
     });
     lines.push('');
     lines.push('合計: ' + r.total + '元' + (r.hasCustomItems ? ' ＋価格未定分' : ''));
+    if (STATUS_URL) {
+      lines.push('');
+      lines.push('▼注文状況はこちらで確認できます');
+      lines.push(STATUS_URL + '&order=' + r.orderId);
+    }
     var text = lines.join('\n');
 
     var done = function () {

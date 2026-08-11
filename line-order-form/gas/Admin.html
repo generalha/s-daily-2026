@@ -66,6 +66,16 @@
   .st-受渡済 { background: #e8f5e9; border-color: #b2dfb5; }
   .st-キャンセル { background: #eee; color: #999; }
 
+  /* 注文カードの進捗バー */
+  .prog { display: flex; gap: 3px; margin-top: 10px; align-items: center; }
+  .prog .seg { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .prog .seg.on { background: var(--green); }
+  .prog .p-label {
+    font-size: .68em; color: var(--muted); margin-left: 6px; white-space: nowrap;
+  }
+  .prog.cancelled .seg { background: #eee; }
+  .prog.cancelled .p-label { color: #b3261e; }
+
   .badge {
     display: inline-block; font-size: .68em; padding: 2px 8px;
     border-radius: 999px; background: #eee; color: #666; margin-left: 6px;
@@ -371,6 +381,23 @@
   }
 
   // ---- 注文一覧 ----
+  // 進捗バー(キャンセル以外のステータスを順に表示)
+  function progressBar(status) {
+    var flow = (DATA.statuses || []).filter(function (s) { return s !== 'キャンセル'; });
+    if (status === 'キャンセル') {
+      return '<div class="prog cancelled">' +
+        flow.map(function () { return '<div class="seg"></div>'; }).join('') +
+        '<span class="p-label">キャンセル</span></div>';
+    }
+    var idx = flow.indexOf(status);
+    if (idx === -1) return '';
+    return '<div class="prog">' +
+      flow.map(function (s, i) {
+        return '<div class="seg' + (i <= idx ? ' on' : '') + '" title="' + escapeHtml(s) + '"></div>';
+      }).join('') +
+      '<span class="p-label">' + (idx + 1) + '/' + flow.length + ' ' + escapeHtml(status) + '</span></div>';
+  }
+
   function renderOrders() {
     var status = document.getElementById('statusFilter').value;
     var q = document.getElementById('searchBox').value.trim().toLowerCase();
@@ -402,6 +429,7 @@
             return '<option' + (s === o.status ? ' selected' : '') + '>' + s + '</option>';
           }).join('') +
         '</select></div>' +
+        progressBar(o.status) +
         '<ul class="oc-items">' + items + '</ul>' +
         '<div class="oc-total">合計 ' + o.total.toLocaleString() + ' 元' + (o.hasCustomItems ? ' ＋価格未定分' : '') + '</div>' +
         (o.shipMethod
@@ -479,7 +507,14 @@
     if (pay.accountName) lines.push('口座名義: ' + pay.accountName);
     lines.push('');
     lines.push('ご入金の確認後、梱包・発送準備に進みます。');
+    lines = lines.concat(statusUrlLines(o.orderId));
     copyText(lines.join('\n'), btn, '注文確定メッセージをコピーしました。LINEに貼り付けて送ってください');
+  }
+
+  // 各メッセージ末尾に付ける注文状況確認URL
+  function statusUrlLines(orderId) {
+    if (!DATA.statusUrl) return [];
+    return ['', '▼注文状況はこちらで確認できます', DATA.statusUrl + '&order=' + orderId];
   }
 
   // ---- 梱包(計量・送料自動計算) ----
@@ -719,8 +754,8 @@
     if (!o.recvName || !o.recvAddress) {
       lines.push('※お届け先(氏名・住所・電話番号)がまだの方は、あわせてお知らせください。');
     }
-    copyText(lines.filter(function (l) { return l !== ''; }).join('\n')
-      .replace(/\n\n+/g, '\n\n'), btn, '送料案内をコピーしました。LINEに貼り付けて送ってください');
+    lines = lines.filter(function (l) { return l !== ''; }).concat(statusUrlLines(o.orderId));
+    copyText(lines.join('\n'), btn, '送料案内をコピーしました。LINEに貼り付けて送ってください');
   }
 
   function copyLabelData(orderId, btn) {
@@ -759,8 +794,9 @@
       '',
       'お届けまで今しばらくお待ちください。'
     ];
-    copyText(lines.filter(function (l, i) { return !(l === '' && lines[i - 1] === ''); }).join('\n'),
-      btn, '発送完了メッセージをコピーしました');
+    lines = lines.filter(function (l, i) { return !(l === '' && lines[i - 1] === ''); })
+      .concat(statusUrlLines(o.orderId));
+    copyText(lines.join('\n'), btn, '発送完了メッセージをコピーしました');
   }
 
   function escapeNone(s) { return String(s); } // コピー用テキストはHTMLエスケープ不要
