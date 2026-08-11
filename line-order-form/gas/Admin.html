@@ -57,7 +57,8 @@
     padding: 8px 10px; font-size: .85em; border-radius: 8px;
     border: 1px solid var(--line); background: #fff; cursor: pointer;
   }
-  .st-未対応 { background: #fdecea; border-color: #f5c6c0; }
+  .st-承認待ち { background: #fdecea; border-color: #f5c6c0; }
+  .st-注文確定 { background: #ffe9d6; border-color: #f5c9a0; }
   .st-入金確認済 { background: #fff8e1; border-color: #f2dd9a; }
   .st-梱包済 { background: #e3f2fd; border-color: #a9d3f5; }
   .st-送料入金確認済 { background: #ede7f6; border-color: #c5b3e6; }
@@ -162,6 +163,17 @@
   .edit-btn {
     margin-top: 8px; padding: 8px 14px; font-size: .8em;
     border: 1px solid var(--green); color: var(--green-dark); background: #fff;
+    border-radius: 999px; cursor: pointer;
+  }
+  .approve-btn {
+    margin-top: 8px; margin-right: 8px; padding: 8px 16px; font-size: .8em; font-weight: 700;
+    border: none; background: var(--green); color: #fff;
+    border-radius: 999px; cursor: pointer;
+  }
+  .approve-btn:disabled { background: #bbb; }
+  .confirm-copy-btn {
+    margin-top: 8px; margin-right: 8px; padding: 8px 14px; font-size: .8em;
+    border: 1px solid #f2b90a; color: #9a7500; background: #fff;
     border-radius: 999px; cursor: pointer;
   }
 
@@ -280,7 +292,8 @@
 
   <div id="tab-summary" style="display:none;">
     <p style="font-size:.78em;color:var(--muted);margin-bottom:10px;">
-      未対応・入金確認済の注文に含まれる商品の合計数量です。仕入れ・在庫確認にご利用ください。
+      承認待ち・注文確定・入金確認済の注文に含まれる商品の合計数量と、現在の在庫数です。
+      仕入れ・在庫補充の判断にご利用ください。
     </p>
     <div id="summaryBox"></div>
   </div>
@@ -299,7 +312,8 @@
     <label>商品</label>
     <div id="editItems"></div>
     <button type="button" class="e-add-btn" onclick="editAddRow()">＋ 商品を追加</button>
-    <div class="hint">マスター商品の価格は保存時に商品マスターの最新価格で再計算されます。自由入力商品は単価を直接入力できます(空欄なら価格未定)。</div>
+    <div class="hint">マスター商品の価格は保存時に商品マスターの最新価格で再計算されます。自由入力商品は単価を直接入力できます(空欄なら価格未定)。<br>
+    ⚠️ 数量の修正で在庫数は自動調整されません。承認済み(注文確定以降)の注文の数量を変えた場合は、商品マスターの在庫数を手で直してください(承認前の修正なら調整不要)。</div>
     <div class="e-total">合計 <span id="editTotal">0</span> 元<span id="editTotalNote"></span></div>
 
     <label>備考</label>
@@ -397,6 +411,12 @@
             (o.shippedDate ? ' / ' + escapeHtml(o.shippedDate) + '発送' : '') + '</div>'
           : '') +
         (o.note ? '<div class="oc-note">📝 ' + escapeHtml(o.note) + '</div>' : '') +
+        (o.status === '承認待ち'
+          ? '<button type="button" class="approve-btn" onclick="approveOrder(\'' + o.orderId + '\', this)">✅ 承認する(在庫を確保して注文確定)</button>'
+          : '') +
+        (o.status === '注文確定'
+          ? '<button type="button" class="confirm-copy-btn" onclick="copyConfirmMsg(\'' + o.orderId + '\', this)">📋 注文確定メッセージをコピー</button>'
+          : '') +
         '<button type="button" class="edit-btn" onclick="openEdit(\'' + o.orderId + '\')">✏️ この注文を修正</button>' +
       '</div>';
     }).join('');
@@ -407,13 +427,8 @@
     sel.disabled = true;
     google.script.run
       .withSuccessHandler(function () {
-        sel.disabled = false;
-        sel.className = 'status-select st-' + status;
-        var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
-        if (o) o.status = status;
-        renderPacking();
-        renderSummary();
         showToast(orderId + ' を「' + status + '」に変更しました');
+        loadData(); // 在庫数の増減があるため全体を再読込
       })
       .withFailureHandler(function (err) {
         sel.disabled = false;
@@ -421,6 +436,50 @@
         loadData();
       })
       .updateOrderStatus(ADMIN_KEY, orderId, status);
+  }
+
+  // 承認: サーバー側で在庫を検証・引き落として「注文確定」にする
+  function approveOrder(orderId, btn) {
+    btn.disabled = true;
+    btn.textContent = '承認中…';
+    google.script.run
+      .withSuccessHandler(function () {
+        showToast(orderId + ' を承認しました。「注文確定メッセージをコピー」してお客様に連絡してください');
+        loadData();
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = '✅ 承認する(在庫を確保して注文確定)';
+        showToast(err.message); // 在庫不足時はここに理由が表示される
+      })
+      .updateOrderStatus(ADMIN_KEY, orderId, '注文確定');
+  }
+
+  function copyConfirmMsg(orderId, btn) {
+    var o = DATA.orders.find(function (x) { return x.orderId === orderId; });
+    if (!o) return;
+    var pay = DATA.payment || {};
+    var lines = [
+      '【ご注文確定のお知らせ】',
+      o.openChatName + ' 様',
+      '注文番号: ' + o.orderId,
+      '',
+      '在庫を確保しました。以下の内容でご注文確定です。'
+    ];
+    o.items.forEach(function (it) {
+      lines.push('・' + it.name + ' × ' + it.qty +
+        (it.subtotal === '' ? '(価格は別途ご案内)' : '(' + it.subtotal + '元)'));
+    });
+    lines.push('');
+    lines.push('商品代合計: ' + o.total.toLocaleString() + '元' + (o.hasCustomItems ? ' ＋価格未定分' : ''));
+    lines.push('');
+    lines.push('▼お振込先(台湾郵便局)');
+    if (pay.bankCode) lines.push('郵局代号: ' + pay.bankCode);
+    if (pay.accountNumber) lines.push('口座番号: ' + pay.accountNumber);
+    if (pay.accountName) lines.push('口座名義: ' + pay.accountName);
+    lines.push('');
+    lines.push('ご入金の確認後、梱包・発送準備に進みます。');
+    copyText(lines.join('\n'), btn, '注文確定メッセージをコピーしました。LINEに貼り付けて送ってください');
   }
 
   // ---- 梱包(計量・送料自動計算) ----
@@ -729,7 +788,7 @@
   // ---- 商品集計 ----
   function renderSummary() {
     var target = DATA.orders.filter(function (o) {
-      return o.status === '未対応' || o.status === '入金確認済';
+      return o.status === '承認待ち' || o.status === '注文確定' || o.status === '入金確認済';
     });
     var agg = {};
     target.forEach(function (o) {
@@ -746,16 +805,22 @@
       box.innerHTML = '<div class="empty">対象の注文がありません</div>';
       return;
     }
+    var stockOf = function (name) {
+      var p = (DATA.products || []).find(function (x) { return x.name === name; });
+      return (p && p.stock !== '') ? p.stock : null;
+    };
     var totalAmount = 0;
     var rows = names.map(function (n) {
       totalAmount += agg[n].amount;
-      return '<tr><td>' + escapeHtml(n) + '</td><td>' + agg[n].qty + '</td><td>' +
+      var stock = stockOf(n);
+      return '<tr><td>' + escapeHtml(n) + '</td><td style="text-align:right;">' + agg[n].qty + '</td>' +
+        '<td style="text-align:right;">' + (stock === null ? '−' : stock) + '</td><td>' +
         (agg[n].noPrice ? agg[n].amount.toLocaleString() + '元 ＋α' : agg[n].amount.toLocaleString() + '元') +
         '</td></tr>';
     }).join('');
     box.innerHTML = '<table class="sum-table">' +
-      '<tr><th>商品名</th><th style="text-align:right;">数量</th><th>金額</th></tr>' + rows +
-      '<tr><td style="font-weight:700;">合計</td><td></td><td style="font-weight:700;color:var(--accent);">' +
+      '<tr><th>商品名</th><th style="text-align:right;">注文数</th><th style="text-align:right;">在庫</th><th>金額</th></tr>' + rows +
+      '<tr><td style="font-weight:700;">合計</td><td></td><td></td><td style="font-weight:700;color:var(--accent);">' +
       totalAmount.toLocaleString() + '元</td></tr></table>';
   }
 

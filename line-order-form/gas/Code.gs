@@ -18,9 +18,12 @@ var SHEET_SETTINGS = '設定';
 var SHEET_SHIPPING = '送料マスター';
 var TIMEZONE       = 'Asia/Taipei';
 
-// 発送フロー: 未対応 →(商品代入金)→ 入金確認済 →(計量・送料確定)→ 梱包済
-//   →(送料入金)→ 送料入金確認済 →(発送ラベル作成・発送)→ 発送済 →(到着確認)→ 受渡済
-var STATUSES = ['未対応', '入金確認済', '梱包済', '送料入金確認済', '発送済', '受渡済', 'キャンセル'];
+// フロー: 承認待ち →(管理者承認・在庫引落)→ 注文確定 →(商品代入金)→ 入金確認済
+//   →(計量・送料確定)→ 梱包済 →(送料入金)→ 送料入金確認済
+//   →(発送ラベル作成・発送)→ 発送済 →(到着確認)→ 受渡済
+var STATUSES = ['承認待ち', '注文確定', '入金確認済', '梱包済', '送料入金確認済', '発送済', '受渡済', 'キャンセル'];
+// 在庫引落済みのステータス(これらに入る時に在庫を減らし、抜ける時に在庫を戻す)
+var STOCK_TAKEN_STATUSES = ['注文確定', '入金確認済', '梱包済', '送料入金確認済', '発送済', '受渡済'];
 
 var ORDER_HEADERS = [
   '注文ID', '注文日時', 'オープンチャット名', 'LINEアカウント名',
@@ -106,6 +109,10 @@ function submitOrder(data) {
     if (!(qty > 0) || qty > 9999) throw new Error('数量が正しくありません。');
     var m = it.productId ? master[String(it.productId)] : null;
     if (m) {
+      // 在庫の事前チェック(確定は管理者の承認時。同時注文分は承認時に検出される)
+      if (m.stock !== '' && qty > m.stock) {
+        throw new Error('「' + m.name + '」は残り' + m.stock + '点です。数量を減らしてください。');
+      }
       return { name: m.name, qty: qty, price: m.price, subtotal: m.price === '' ? '' : m.price * qty, custom: false };
     }
     return { name: String(it.name).trim(), qty: qty, price: '', subtotal: '', custom: true };
@@ -325,6 +332,9 @@ function updateOrder(key, orderId, data) {
 
 /**
  * 管理者ページ用: 注文のステータスを更新する(同一注文IDの全行)。
+ * 在庫管理: 「承認待ち/キャンセル → 注文確定など」への変更時に在庫を引き落とし
+ * (不足していれば例外を投げて変更しない)、逆方向への変更時は在庫を戻す。
+ * 承認ボタンは status='注文確定' でこの関数を呼ぶ。
  */
 function updateOrderStatus(key, orderId, status) {
   requireAdmin_(key);
@@ -337,14 +347,28 @@ function updateOrderStatus(key, orderId, status) {
     var lastRow = sheet.getLastRow();
     if (lastRow < 2) return { updated: 0 };
     var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    var updated = 0;
+    var rowIdxs = [];
     for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]) === String(orderId)) {
-        sheet.getRange(i + 2, 10).setValue(status); // 10列目 = ステータス
-        updated++;
+      if (String(ids[i][0]) === String(orderId)) rowIdxs.push(i + 2);
+    }
+    if (rowIdxs.length === 0) return { updated: 0 };
+
+    var oldStatus = String(sheet.getRange(rowIdxs[0], COL_STATUS).getValue()) || STATUSES[0];
+    var wasTaken = STOCK_TAKEN_STATUSES.indexOf(oldStatus) !== -1;
+    var willTake = STOCK_TAKEN_STATUSES.indexOf(status) !== -1;
+
+    if (wasTaken !== willTake) {
+      var order = findOrder_(orderId);
+      if (order) {
+        // 引落時に在庫不足ならここで例外 → ステータスは変更されない
+        adjustStockForOrder_(order, willTake ? -1 : +1);
       }
     }
-    return { updated: updated };
+
+    rowIdxs.forEach(function (row) {
+      sheet.getRange(row, COL_STATUS).setValue(status);
+    });
+    return { updated: rowIdxs.length, oldStatus: oldStatus };
   } finally {
     lock.releaseLock();
   }
@@ -434,12 +458,12 @@ function getSheet_(name) {
   return sheet;
 }
 
-/** 商品マスターから有効な商品を表示順で返す。 */
+/** 商品マスターから有効な商品を表示順で返す。stockが '' の商品は在庫管理しない。 */
 function getActiveProducts_() {
   var sheet = getSheet_(SHEET_PRODUCTS);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  var values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  var values = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
   var products = [];
   values.forEach(function (r) {
     var id = String(r[0]).trim();
@@ -448,15 +472,69 @@ function getActiveProducts_() {
     var active = String(r[4]).trim();
     if (active === '無効' || active === 'FALSE' || active === 'false' || r[4] === false) return;
     var price = (r[2] === '' || r[2] === null || isNaN(Number(r[2]))) ? '' : Number(r[2]);
+    var stock = (r[5] === '' || r[5] === null || isNaN(Number(r[5]))) ? '' : Math.floor(Number(r[5]));
     products.push({
       id: id,
       name: name,
       price: price,
+      stock: stock,
       sortOrder: (r[3] === '' || isNaN(Number(r[3]))) ? 9999 : Number(r[3])
     });
   });
   products.sort(function (a, b) { return a.sortOrder - b.sortOrder; });
   return products;
+}
+
+/** 商品マスターの全行を行番号付きで返す(在庫更新用)。 */
+function readProductsRaw_() {
+  var sheet = getSheet_(SHEET_PRODUCTS);
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  var list = [];
+  values.forEach(function (r, i) {
+    var name = String(r[1]).trim();
+    if (!name) return;
+    var stock = (r[5] === '' || r[5] === null || isNaN(Number(r[5]))) ? '' : Math.floor(Number(r[5]));
+    list.push({ row: i + 2, name: name, stock: stock });
+  });
+  return list;
+}
+
+/**
+ * 注文の明細に応じて在庫を増減する(sign: -1=引落 / +1=戻し)。
+ * 在庫管理対象(商品マスターに同名があり在庫数が数値)の商品のみが対象。
+ * 引落時に在庫が足りない場合は例外を投げ、一切書き込まない。
+ */
+function adjustStockForOrder_(order, sign) {
+  var raw = readProductsRaw_();
+  var byName = {};
+  raw.forEach(function (p) { byName[p.name] = p; });
+
+  // 同一商品が複数行に分かれている場合に備えて数量を合算
+  var need = {};
+  order.items.forEach(function (it) {
+    var p = byName[it.name];
+    if (!p || p.stock === '') return; // 自由入力・在庫管理なしは対象外
+    need[it.name] = (need[it.name] || 0) + it.qty;
+  });
+
+  var shortages = [];
+  Object.keys(need).forEach(function (name) {
+    if (sign < 0 && byName[name].stock < need[name]) {
+      shortages.push(name + '(残り' + byName[name].stock + '点/注文' + need[name] + '点)');
+    }
+  });
+  if (shortages.length > 0) {
+    throw new Error('在庫不足のため承認できません: ' + shortages.join('、') +
+      '。注文を修正するか、商品マスターの在庫数を確認してください。');
+  }
+
+  var sheet = getSheet_(SHEET_PRODUCTS);
+  Object.keys(need).forEach(function (name) {
+    var p = byName[name];
+    sheet.getRange(p.row, 6).setValue(p.stock + sign * need[name]);
+  });
 }
 
 /** 設定シートをキー・バリューのオブジェクトとして読み込む。 */
@@ -633,16 +711,18 @@ function onOpen() {
 function setupSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  if (!ss.getSheetByName(SHEET_PRODUCTS)) {
-    var p = ss.insertSheet(SHEET_PRODUCTS);
-    p.getRange(1, 1, 1, 5).setValues([['商品ID', '商品名', '価格(元)', '表示順', '有効']])
-      .setFontWeight('bold').setBackground('#d9ead3');
-    p.getRange(2, 1, 2, 5).setValues([
-      ['P001', 'サンプル商品A', 120, 1, '有効'],
-      ['P002', 'サンプル商品B', 250, 2, '有効']
+  var p = ss.getSheetByName(SHEET_PRODUCTS);
+  if (!p) {
+    p = ss.insertSheet(SHEET_PRODUCTS);
+    p.getRange(2, 1, 2, 6).setValues([
+      ['P001', 'サンプル商品A', 120, 1, '有効', 10],
+      ['P002', 'サンプル商品B', 250, 2, '有効', '']
     ]);
     p.setFrozenRows(1);
   }
+  // ヘッダーは常に書き直す(旧バージョンからの在庫数列の追加にも対応)
+  p.getRange(1, 1, 1, 6).setValues([['商品ID', '商品名', '価格(元)', '表示順', '有効', '在庫数']])
+    .setFontWeight('bold').setBackground('#d9ead3');
 
   var o = ss.getSheetByName(SHEET_ORDERS);
   if (!o) {
@@ -693,7 +773,8 @@ function setupSheets() {
   SpreadsheetApp.getUi().alert(
     'セットアップ完了!\n\n' +
     '1.「設定」シートで振込先口座を入力してください。\n' +
-    '2.「商品マスター」シートに商品を登録してください。\n' +
+    '2.「商品マスター」シートに商品と在庫数を登録してください。\n' +
+    '  (在庫数が空欄の商品は在庫管理なし=無制限になります)\n' +
     '3.「送料マスター」の料金はサンプルです。必ず日本郵便の\n' +
     '   台湾宛料金表(EMS/国際小包)を台湾元に換算して更新してください。\n' +
     '4. デプロイしてURLを取得してください(SETUP.md参照)。'

@@ -65,6 +65,14 @@
     border: 1px solid var(--line); border-left: none; border-right: none;
   }
   .product.selected { background: #f0fbf4; border-radius: 8px; }
+  .product.soldout { opacity: .55; }
+  .stock-badge {
+    display: inline-block; font-size: .7em; font-weight: 700;
+    padding: 1px 8px; border-radius: 999px; margin-left: 6px;
+    background: #e8f8ee; color: var(--green-dark); vertical-align: middle;
+  }
+  .stock-badge.low { background: #fff3cd; color: #7a5d00; }
+  .stock-badge.out { background: #fdecea; color: #b3261e; }
 
   /* 自由入力商品 */
   .custom-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
@@ -219,8 +227,11 @@
   <!-- ===== 完了ページ ===== -->
   <div id="donePage">
     <div class="done-icon">✅</div>
-    <div class="done-title">ご注文を受け付けました</div>
-    <div class="done-sub">お手数ですが、下記口座へお振込をお願いします</div>
+    <div class="done-title">ご注文を受け付けました(在庫確認中)</div>
+    <div class="done-sub">
+      在庫を確認のうえ、LINEで<b>注文確定のご連絡</b>をお送りします。<br>
+      お振込は<b>確定のご連絡が届いてから</b>お願いします。
+    </div>
     <div class="order-id-badge">注文番号 <span id="doneOrderId"></span></div>
 
     <div class="card">
@@ -229,7 +240,7 @@
     </div>
 
     <div class="pay-box">
-      <h3>お振込先(台湾郵便局)</h3>
+      <h3>お振込先(台湾郵便局)※確定のご連絡後にお振込ください</h3>
       <dl id="payInfo"></dl>
       <div class="hint" id="payNote" style="margin-top:8px;"></div>
     </div>
@@ -294,18 +305,31 @@
       var priceHtml = p.price === ''
         ? '<span class="p-price"><small>価格はお問い合わせください</small></span>'
         : '<span class="p-price">' + p.price + ' 元 <small>/ 1点</small></span>';
-      return '<div class="product" id="prod-' + i + '">' +
-        '<div class="p-info"><div class="p-name">' + escapeHtml(p.name) + '</div>' + priceHtml + '</div>' +
-        '<div class="stepper">' +
-          '<button type="button" class="minus" onclick="step(' + i + ',-1)">−</button>' +
-          '<input type="tel" id="qty-' + i + '" value="0" oninput="onQtyInput(' + i + ')">' +
-          '<button type="button" class="plus" onclick="step(' + i + ',1)">＋</button>' +
-        '</div></div>';
+      var soldOut = (p.stock !== '' && p.stock <= 0);
+      var stockHtml = '';
+      if (soldOut) {
+        stockHtml = '<span class="stock-badge out">売り切れ</span>';
+      } else if (p.stock !== '' && p.stock <= 5) {
+        stockHtml = '<span class="stock-badge low">残り' + p.stock + '点</span>';
+      } else if (p.stock !== '') {
+        stockHtml = '<span class="stock-badge">残り' + p.stock + '点</span>';
+      }
+      var stepperHtml = soldOut
+        ? '<div style="font-size:.8em;color:#b3261e;font-weight:700;">注文不可</div>'
+        : '<div class="stepper">' +
+            '<button type="button" class="minus" onclick="step(' + i + ',-1)">−</button>' +
+            '<input type="tel" id="qty-' + i + '" value="0" oninput="onQtyInput(' + i + ')">' +
+            '<button type="button" class="plus" onclick="step(' + i + ',1)">＋</button>' +
+          '</div>';
+      return '<div class="product' + (soldOut ? ' soldout' : '') + '" id="prod-' + i + '">' +
+        '<div class="p-info"><div class="p-name">' + escapeHtml(p.name) + stockHtml + '</div>' + priceHtml + '</div>' +
+        stepperHtml + '</div>';
     }).join('');
   }
 
   function step(i, delta) {
     var input = document.getElementById('qty-' + i);
+    if (!input) return;
     var v = Math.max(0, (parseInt(input.value, 10) || 0) + delta);
     input.value = v;
     onQtyInput(i);
@@ -313,9 +337,12 @@
 
   function onQtyInput(i) {
     var input = document.getElementById('qty-' + i);
+    if (!input) return;
     var v = parseInt(input.value, 10);
     if (isNaN(v) || v < 0) v = 0;
-    if (v > 999) v = 999;
+    // 在庫管理している商品は在庫数を上限にする
+    var max = (PRODUCTS[i].stock !== '') ? PRODUCTS[i].stock : 999;
+    if (v > max) v = max;
     if (String(v) !== input.value) input.value = v;
     document.getElementById('prod-' + i).classList.toggle('selected', v > 0);
     updateTotal();
@@ -344,7 +371,9 @@
   function collectItems() {
     var items = [];
     PRODUCTS.forEach(function (p, i) {
-      var qty = parseInt(document.getElementById('qty-' + i).value, 10) || 0;
+      var input = document.getElementById('qty-' + i);
+      if (!input) return; // 売り切れ商品は入力欄なし
+      var qty = parseInt(input.value, 10) || 0;
       if (qty > 0) items.push({ productId: p.id, name: p.name, price: p.price, qty: qty });
     });
     document.querySelectorAll('.custom-row').forEach(function (row) {
@@ -462,7 +491,7 @@
   function copySummary() {
     if (!lastResult) return;
     var r = lastResult;
-    var lines = ['【注文しました】', '注文番号: ' + r.orderId,
+    var lines = ['【注文しました(確定待ち)】', '注文番号: ' + r.orderId,
       'お名前: ' + document.getElementById('openChatName').value.trim(), ''];
     r.items.forEach(function (it) {
       lines.push('・' + it.name + ' × ' + it.qty +
